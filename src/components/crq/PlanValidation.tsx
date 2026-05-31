@@ -15,7 +15,7 @@ type ColDef = { key: string; label: string; render: (ctx: { plan: Plan; crq: CRQ
 
 const idCol = (stage?: string): ColDef => ({
   key: "id",
-  label: "CRQ Number  |  Plan ID",Nam
+  label: "CRQ Number  |  Plan ID",
   render: ({ plan, crq }) => (
     <span className="whitespace-nowrap">
       <Link

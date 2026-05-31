@@ -11,7 +11,7 @@ const CHECKPOINTS = [
   { title: "IS-IS Adjacency",             icon: Network,  count: 4,  progress: 30 },
 ] as const;
 
-// ──ccc─ Validationn options ──────────────────────────────────────────────────────
+// ──ccc─ Validation options ──────────────────────────────────────────────────────
 
 const OPTIONS = [
   {
