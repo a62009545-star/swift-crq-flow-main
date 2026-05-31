@@ -1,5 +1,16 @@
 import { useState } from "react";
-import { PLANS, Plan, CRQRecord, STATUS_STYLES, TASKS_BY_CRQ, mopValidationStatus, taskClosureStatus, MOPV_STATUS_STYLES, CLOSURE_STATUS_STYLES, TASK_STATUS_STYLES } from "./data";
+import {
+  PLANS,
+  Plan,
+  CRQRecord,
+  STATUS_STYLES,
+  TASKS_BY_CRQ,
+  mopValidationStatus,
+  taskClosureStatus,
+  MOPV_STATUS_STYLES,
+  CLOSURE_STATUS_STYLES,
+  TASK_STATUS_STYLES,
+} from "./data";
 import { ChevronRight, Eye, ExternalLink, FileText, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ValidationModal } from "./ValidationModal";
@@ -8,10 +19,14 @@ import { PdfModal } from "./PdfModal";
 import { CrqDrawer } from "./CrqDrawer";
 import { SchedulingApprovalModal } from "./SchedulingApprovalModal";
 import { ImpactAnalysisModal } from "./ImpactAnalysisModal";
-import { PlanValidationModal } from "./Planvalidationmodal";
+import { PlanValidationModal } from "./PlanValidationModal";
 import { Link } from "@tanstack/react-router";
 
-type ColDef = { key: string; label: string; render: (ctx: { plan: Plan; crq: CRQRecord }) => React.ReactNode };
+type ColDef = {
+  key: string;
+  label: string;
+  render: (ctx: { plan: Plan; crq: CRQRecord }) => React.ReactNode;
+};
 
 const idCol = (stage?: string): ColDef => ({
   key: "id",
@@ -36,17 +51,27 @@ const statusCol = (label = "Review Status"): ColDef => ({
   key: "status",
   label,
   render: ({ crq }) => (
-    <span className={cn("text-[11px] px-2 py-0.5 rounded-full inline-block", STATUS_STYLES[crq.status])}>{crq.status}</span>
+    <span className={cn("text-[11px] px-2 py-0.5 rounded-full inline-block", STATUS_STYLES[crq.status])}>
+      {crq.status}
+    </span>
   ),
 });
 
-const txt = (key: string, label: string, get: (c: { plan: Plan; crq: CRQRecord }) => React.ReactNode): ColDef => ({
+const txt = (
+  key: string,
+  label: string,
+  get: (c: { plan: Plan; crq: CRQRecord }) => React.ReactNode,
+): ColDef => ({
   key,
   label,
   render: (ctx) => <span className="text-xs text-slate-600 whitespace-nowrap">{get(ctx)}</span>,
 });
 
-const mono = (key: string, label: string, get: (c: { plan: Plan; crq: CRQRecord }) => React.ReactNode): ColDef => ({
+const mono = (
+  key: string,
+  label: string,
+  get: (c: { plan: Plan; crq: CRQRecord }) => React.ReactNode,
+): ColDef => ({
   key,
   label,
   render: (ctx) => <span className="font-mono text-xs text-slate-600">{get(ctx)}</span>,
@@ -73,7 +98,9 @@ function columnsForStage(stage: string | undefined): ColDef[] {
         txt("desc", "Description", ({ plan }) => plan.description),
         txt("mct", "MOP Created Time", ({ crq }) => crq.reviewStart),
         statusCol("CRQ Status"),
-        txt("mcs", "MOP Creation Status", ({ crq }) => (crq.status === "Approved" ? "Created" : "Pending")),
+        txt("mcs", "MOP Creation Status", ({ crq }) =>
+          crq.status === "Approved" ? "Created" : "Pending",
+        ),
         mono("mcb", "MOP Created By", ({ crq }) => crq.olmid),
         txt("mcm", "MOP Creation Method", () => "Manual"),
       ];
@@ -88,7 +115,14 @@ function columnsForStage(stage: string | undefined): ColDef[] {
           render: ({ crq }) => {
             const s = mopValidationStatus(crq.status);
             return (
-              <span className={cn("text-[11px] px-2 py-0.5 rounded-full inline-block", MOPV_STATUS_STYLES[s])}>{s}</span>
+              <span
+                className={cn(
+                  "text-[11px] px-2 py-0.5 rounded-full inline-block",
+                  MOPV_STATUS_STYLES[s],
+                )}
+              >
+                {s}
+              </span>
             );
           },
         },
@@ -98,7 +132,14 @@ function columnsForStage(stage: string | undefined): ColDef[] {
           render: ({ crq }) => {
             const s = mopValidationStatus(crq.status);
             return (
-              <span className={cn("text-[11px] px-2 py-0.5 rounded-full inline-block", MOPV_STATUS_STYLES[s])}>{s}</span>
+              <span
+                className={cn(
+                  "text-[11px] px-2 py-0.5 rounded-full inline-block",
+                  MOPV_STATUS_STYLES[s],
+                )}
+              >
+                {s}
+              </span>
             );
           },
         },
@@ -124,7 +165,14 @@ function columnsForStage(stage: string | undefined): ColDef[] {
           render: ({ crq }) => {
             const s = taskClosureStatus(crq.status);
             return (
-              <span className={cn("text-[11px] px-2 py-0.5 rounded-full inline-block", CLOSURE_STATUS_STYLES[s])}>{s}</span>
+              <span
+                className={cn(
+                  "text-[11px] px-2 py-0.5 rounded-full inline-block",
+                  CLOSURE_STATUS_STYLES[s],
+                )}
+              >
+                {s}
+              </span>
             );
           },
         },
@@ -148,22 +196,29 @@ function columnsForStage(stage: string | undefined): ColDef[] {
   }
 }
 
-export function PlanValidation({ title = "Plan & Inventory Validation", stage }: { title?: string; stage?: string } = {}) {
-  const [taskOpen, setTaskOpen]       = useState<Set<string>>(new Set());
-  const [valCrq, setValCrq]           = useState<CRQRecord | null>(null);
-  const [mopCrq, setMopCrq]           = useState<CRQRecord | null>(null);
-  const [impactCrq, setImpactCrq]     = useState<CRQRecord | null>(null);
+export function PlanValidation({
+  title = "Plan & Inventory Validation",
+  stage,
+}: { title?: string; stage?: string } = {}) {
+  const [taskOpen, setTaskOpen] = useState<Set<string>>(new Set());
+  const [valCrq, setValCrq] = useState<CRQRecord | null>(null);
+  const [mopCrq, setMopCrq] = useState<CRQRecord | null>(null);
+  const [impactCrq, setImpactCrq] = useState<CRQRecord | null>(null);
   const [scheduleCrq, setScheduleCrq] = useState<CRQRecord | null>(null);
   // ── NEW: plan-stage validation modal ──────────────────────────────────────
-  const [planValCrq, setPlanValCrq]   = useState<CRQRecord | null>(null);
-  const [pdfOpen, setPdfOpen]         = useState(false);
-  const [drawerCrq, setDrawerCrq]     = useState<CRQRecord | null>(null);
-  const [search, setSearch]           = useState("");
+  const [planValCrq, setPlanValCrq] = useState<CRQRecord | null>(null);
+  const [pdfOpen, setPdfOpen] = useState(false);
+  const [drawerCrq, setDrawerCrq] = useState<CRQRecord | null>(null);
+  const [search, setSearch] = useState("");
 
   const toggleTask = (id: string) => {
     setTaskOpen((p) => {
       const n = new Set(p);
-      n.has(id) ? n.delete(id) : n.add(id);
+      if (n.has(id)) {
+        n.delete(id);
+      } else {
+        n.add(id);
+      }
       return n;
     });
   };
@@ -176,7 +231,7 @@ export function PlanValidation({ title = "Plan & Inventory Validation", stage }:
     return plan.id.toLowerCase().includes(q) || crq.id.toLowerCase().includes(q);
   });
 
-  const cols    = columnsForStage(stage);
+  const cols = columnsForStage(stage);
   const colSpan = cols.length + 3; // +3: expander, checkbox, actions
 
   const handleEyeClick = (crq: CRQRecord) => {
@@ -199,7 +254,9 @@ export function PlanValidation({ title = "Plan & Inventory Validation", stage }:
       <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <h2 className="text-base font-semibold text-slate-900">{title}</h2>
-          <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-xs font-medium border border-indigo-100">{rows.length}</span>
+          <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-xs font-medium border border-indigo-100">
+            {rows.length}
+          </span>
         </div>
         <div className="flex items-center bg-white rounded-lg border border-slate-200 px-3 py-2 w-72 focus-within:ring-2 focus-within:ring-indigo-200 focus-within:border-indigo-400 transition">
           <Search className="h-4 w-4 text-slate-400" />
@@ -214,50 +271,58 @@ export function PlanValidation({ title = "Plan & Inventory Validation", stage }:
 
       <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
         <div className="overflow-x-auto scrollbar-thin">
-          <table className="w-full min-w-[1200px] text-sm">
+          <table className="w-full min-w-80 text-sm">
             <thead>
               <tr className="text-[11px] uppercase tracking-wide text-slate-500 bg-slate-50/60">
                 <th className="text-left font-medium py-2.5 pl-4 pr-3 w-8"></th>
                 <th className="text-left font-medium py-2.5 pr-3 w-8"></th>
                 {cols.map((c) => (
-                  <th key={c.key} className="text-left font-medium py-2.5 pr-3 whitespace-nowrap">{c.label}</th>
+                  <th key={c.key} className="text-left font-medium py-2.5 pr-3 whitespace-nowrap">
+                    {c.label}
+                  </th>
                 ))}
                 <th className="text-left font-medium py-2.5 pr-4">Actions</th>
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 ? (
-                <tr><td colSpan={colSpan} className="text-center py-8 text-xs text-slate-400">No matching records.</td></tr>
-              ) : rows.map(({ plan, crq }) => (
-                <CrqFlatRow
-                  key={crq.id}
-                  plan={plan}
-                  crq={crq}
-                  cols={cols}
-                  colSpan={colSpan}
-                  open={taskOpen.has(crq.id)}
-                  onToggle={() => toggleTask(crq.id)}
-                  onEye={() => handleEyeClick(crq)}
-                  onPdf={() => setPdfOpen(true)}
-                  onDrawer={() => setDrawerCrq(crq)}
-                />
-              ))}
+                <tr>
+                  <td colSpan={colSpan} className="text-center py-8 text-xs text-slate-400">
+                    No matching records.
+                  </td>
+                </tr>
+              ) : (
+                rows.map(({ plan, crq }) => (
+                  <CrqFlatRow
+                    key={crq.id}
+                    plan={plan}
+                    crq={crq}
+                    cols={cols}
+                    colSpan={colSpan}
+                    open={taskOpen.has(crq.id)}
+                    onToggle={() => toggleTask(crq.id)}
+                    onEye={() => handleEyeClick(crq)}
+                    onPdf={() => setPdfOpen(true)}
+                    onDrawer={() => setDrawerCrq(crq)}
+                  />
+                ))
+              )}
             </tbody>
           </table>
         </div>
       </div>
 
       {/* Modals */}
-      <ValidationModal        crq={valCrq}      onClose={() => setValCrq(null)} />
-      <MopUploadModal         crq={mopCrq}      onClose={() => setMopCrq(null)} />
-      <ImpactAnalysisModal    crq={impactCrq}   onClose={() => setImpactCrq(null)} />
+      <ValidationModal crq={valCrq} onClose={() => setValCrq(null)} />
+      <MopUploadModal crq={mopCrq} onClose={() => setMopCrq(null)} />
+      <ImpactAnalysisModal crq={impactCrq} onClose={() => setImpactCrq(null)} />
       <SchedulingApprovalModal crq={scheduleCrq} onClose={() => setScheduleCrq(null)} />
 
       {/* Plan & Inventory Validation popup */}
-      <PlanValidationModal    crq={planValCrq}  onClose={() => setPlanValCrq(null)} />
+      <PlanValidationModal crq={planValCrq} onClose={() => setPlanValCrq(null)} />
 
-      <PdfModal               open={pdfOpen}    onClose={() => setPdfOpen(false)} />
-      <CrqDrawer              crq={drawerCrq}   onClose={() => setDrawerCrq(null)} />
+      <PdfModal open={pdfOpen} onClose={() => setPdfOpen(false)} />
+      <CrqDrawer crq={drawerCrq} onClose={() => setDrawerCrq(null)} />
     </div>
   );
 }
@@ -296,45 +361,83 @@ function CrqFlatRow({
         </td>
         <td className="py-2.5 pr-3"></td>
         {cols.map((c) => (
-          <td key={c.key} className="py-2.5 pr-3">{c.render({ plan, crq })}</td>
+          <td key={c.key} className="py-2.5 pr-3">
+            {c.render({ plan, crq })}
+          </td>
         ))}
         <td className="py-2.5 pr-4">
           <div className="flex items-center gap-1">
-            <ActionBtn title="View Validation" onClick={onEye}><Eye className="h-3.5 w-3.5" /></ActionBtn>
-            <ActionBtn title="Open details (double-click)" onClick={onDrawer} onDouble={onDrawer}><ExternalLink className="h-3.5 w-3.5" /></ActionBtn>
-            <ActionBtn title="View PDF" onClick={onPdf}><FileText className="h-3.5 w-3.5" /></ActionBtn>
+            <ActionBtn title="View Validation" onClick={onEye}>
+              <Eye className="h-3.5 w-3.5" />
+            </ActionBtn>
+            <ActionBtn title="Open details (double-click)" onClick={onDrawer} onDouble={onDrawer}>
+              <ExternalLink className="h-3.5 w-3.5" />
+            </ActionBtn>
+            <ActionBtn title="View PDF" onClick={onPdf}>
+              <FileText className="h-3.5 w-3.5" />
+            </ActionBtn>
           </div>
         </td>
       </tr>
-      {open && tasks.map((t) => (
-        <tr key={t.id} className="bg-indigo-50/30">
-          <td colSpan={colSpan} className="px-4 py-3">
-            <div className="text-xs font-semibold text-indigo-600 mb-2">
-              Tasks Associated with CRQ{" "}
-              <span className="ml-1 px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">{tasks.length}</span>
-            </div>
-            <div className="grid grid-cols-7 gap-3 text-xs">
-              <div><div className="text-[10px] uppercase text-slate-400">Task ID</div><div className="font-mono text-slate-700 break-all">{t.id}</div></div>
-              <div><div className="text-[10px] uppercase text-slate-400">NE Label</div><div className="font-mono text-slate-700 break-all">{t.neLabel}</div></div>
-              <div><div className="text-[10px] uppercase text-slate-400">Plan Activity Details</div><div className="text-slate-700">{t.planActivity}</div></div>
-              <div>
-                <div className="text-[10px] uppercase text-slate-400 mb-1">Task Profile Type</div>
-                <div className="flex flex-wrap gap-1">
-                  {t.profileTypes.map((p) => (
-                    <span key={p} className="text-[10px] px-1.5 py-0.5 rounded-full bg-white border border-slate-200 text-slate-600">{p}</span>
-                  ))}
+      {open &&
+        tasks.map((t) => (
+          <tr key={t.id} className="bg-indigo-50/30">
+            <td colSpan={colSpan} className="px-4 py-3">
+              <div className="text-xs font-semibold text-indigo-600 mb-2">
+                Tasks Associated with CRQ{" "}
+                <span className="ml-1 px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
+                  {tasks.length}
+                </span>
+              </div>
+              <div className="grid grid-cols-7 gap-3 text-xs">
+                <div>
+                  <div className="text-[10px] uppercase text-slate-400">Task ID</div>
+                  <div className="font-mono text-slate-700 break-all">{t.id}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase text-slate-400">NE Label</div>
+                  <div className="font-mono text-slate-700 break-all">{t.neLabel}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase text-slate-400">Plan Activity Details</div>
+                  <div className="text-slate-700">{t.planActivity}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase text-slate-400 mb-1">Task Profile Type</div>
+                  <div className="flex flex-wrap gap-1">
+                    {t.profileTypes.map((p) => (
+                      <span
+                        key={p}
+                        className="text-[10px] px-1.5 py-0.5 rounded-full bg-white border border-slate-200 text-slate-600"
+                      >
+                        {p}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase text-slate-400">Location Code</div>
+                  <div className="text-slate-700">{t.locationCode}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase text-slate-400">Task Activity</div>
+                  <div className="text-slate-700">{t.taskActivity}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase text-slate-400 mb-1">Task Status</div>
+                  <span
+                    className={cn(
+                      "text-[10px] px-2 py-0.5 rounded-full inline-block",
+                      TASK_STATUS_STYLES[t.status],
+                    )}
+                  >
+                    {t.status}
+                  </span>
                 </div>
               </div>
-              <div><div className="text-[10px] uppercase text-slate-400">Location Code</div><div className="text-slate-700">{t.locationCode}</div></div>
-              <div><div className="text-[10px] uppercase text-slate-400">Task Activity</div><div className="text-slate-700">{t.taskActivity}</div></div>
-              <div>
-                <div className="text-[10px] uppercase text-slate-400 mb-1">Task Status</div>
-                <span className={cn("text-[10px] px-2 py-0.5 rounded-full inline-block", TASK_STATUS_STYLES[t.status])}>{t.status}</span>
-              </div>
-            </div>
-          </td>
-        </tr>
-      ))}
+            </td>
+          </tr>
+        ))}
     </>
   );
 }
