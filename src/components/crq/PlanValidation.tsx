@@ -8,14 +8,14 @@ import { PdfModal } from "./PdfModal";
 import { CrqDrawer } from "./CrqDrawer";
 import { SchedulingApprovalModal } from "./SchedulingApprovalModal";
 import { ImpactAnalysisModal } from "./ImpactAnalysisModal";
-import { PlanValidationModal } from "./PlanValidationModal";
+import { PlanValidationModal } from "./Planvalidationmodal";
 import { Link } from "@tanstack/react-router";
 
 type ColDef = { key: string; label: string; render: (ctx: { plan: Plan; crq: CRQRecord }) => React.ReactNode };
 
 const idCol = (stage?: string): ColDef => ({
   key: "id",
-  label: "CRQ Number  |  Plan ID",
+  label: "CRQ Number  |  Plan ID",Nam
   render: ({ plan, crq }) => (
     <span className="whitespace-nowrap">
       <Link
