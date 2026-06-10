@@ -611,7 +611,7 @@ export function CrqDrawer({ crq, onClose }: { crq: CRQRecord | null; onClose: ()
 
             {/* Body */}
             <div className="flex-1 overflow-y-auto scrollbar-thin">
-              <Section title="CRQ — General Information">
+              <Section title="CRQ — Requestor Detail Information">
                 <Field label="CRQ Number"    value={crq.id} />
                 <Field label="Vendor"         value={crq.vendor} />
                 <Field label="Location Code"  value={crq.location || "—"} />

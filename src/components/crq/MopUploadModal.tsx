@@ -1,6 +1,6 @@
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { CRQRecord } from "./data";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { FileText, UploadCloud, ThumbsUp, ThumbsDown, XCircle, CheckCircle2, MessageSquare } from "lucide-react";
 
@@ -14,7 +14,22 @@ export function MopUploadPanel({ crqId, onCancel, onSubmit }: { crqId: string; o
   const [pick, setPick] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [remark, setRemark] = useState("");
-  const canSubmit = !!pick && !!file;
+  const [rejectionReason, setRejectionReason] = useState("");
+  const [rejectionOwner, setRejectionOwner] = useState("");
+  const [successMsg, setSuccessMsg] = useState(false);
+  
+  const canSubmit = pick && (pick === "PASS" || (pick !== "PASS" && rejectionReason && rejectionOwner)) && file;
+
+  const handlePick = (id: string) => {
+    setPick(id);
+    if (id === "PASS") {
+      setSuccessMsg(true);
+      setTimeout(() => setSuccessMsg(false), 2000);
+      setRejectionReason("");
+      setRejectionOwner("");
+    }
+  };
+
   return (
     <div className="bg-white">
       <div className="sticky top-0 z-10 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between">
@@ -48,6 +63,14 @@ export function MopUploadPanel({ crqId, onCancel, onSubmit }: { crqId: string; o
           </label>
         </div>
         <div className="col-span-12 md:col-span-6 p-5 space-y-4">
+          {/* Success Message */}
+          {successMsg && (
+            <div className="flex items-center gap-2 rounded-lg bg-green-50 border border-green-200 px-4 py-3">
+              <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />
+              <span className="text-sm font-semibold text-green-800">Status submitted successfully</span>
+            </div>
+          )}
+
           <div>
             <div className="text-sm font-semibold text-slate-800">Execution Status</div>
             <div className="text-xs text-slate-500 mt-1">Select the final outcome of the MOP execution.</div>
@@ -58,17 +81,49 @@ export function MopUploadPanel({ crqId, onCancel, onSubmit }: { crqId: string; o
               const Icon = o.icon;
               const active = pick === o.id;
               return (
-                <button
-                  key={o.id}
-                  onClick={() => setPick(o.id)}
-                  className={cn(
-                    "w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 transition-all duration-200",
-                    active ? `${o.border} ${o.bg} shadow-sm` : "border-slate-200 hover:border-slate-300",
+                <div key={o.id}>
+                  <button
+                    onClick={() => handlePick(o.id)}
+                    className={cn(
+                      "w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 transition-all duration-200",
+                      active ? `${o.border} ${o.bg} shadow-sm` : "border-slate-200 hover:border-slate-300",
+                    )}
+                  >
+                    <Icon className={cn("h-5 w-5", o.color)} />
+                    <span className="text-sm font-semibold text-slate-700">{o.label}</span>
+                  </button>
+
+                  {/* Rejection Details for FAILED/CANCELED */}
+                  {active && (o.id === "FAILED" || o.id === "CANCELED") && (
+                    <div className="mt-2 p-3 rounded-lg border border-amber-200 bg-amber-50 space-y-3">
+                      <h4 className="font-semibold text-amber-900 text-xs">Rejection Details</h4>
+                      <div>
+                        <label className="text-xs font-semibold text-slate-700 mb-1 block">
+                          Rejection Reason <span className="text-red-500">*</span>
+                        </label>
+                        <textarea
+                          rows={2}
+                          value={rejectionReason}
+                          onChange={(e) => setRejectionReason(e.target.value)}
+                          placeholder="Enter rejection reason..."
+                          className="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300 resize-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-slate-700 mb-1 block">
+                          Rejection Owner <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={rejectionOwner}
+                          onChange={(e) => setRejectionOwner(e.target.value)}
+                          placeholder="Enter owner name or ID..."
+                          className="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
+                        />
+                      </div>
+                    </div>
                   )}
-                >
-                  <Icon className={cn("h-5 w-5", o.color)} />
-                  <span className="text-sm font-semibold text-slate-700">{o.label}</span>
-                </button>
+                </div>
               );
             })}
           </div>
