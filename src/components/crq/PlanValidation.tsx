@@ -437,7 +437,7 @@ function CrqFlatRow({
           <tr key={t.id} className="bg-indigo-50/30">
             <td colSpan={colSpan} className={cn("px-4 py-3", idx > 0 && "border-t border-indigo-100/60")}>
               {idx === 0 && (
-                <div className="text-xs font-semibold text-indigo-600 mb-2 text-center">
+                <div className="text-xs font-semibold text-indigo-600 mb-2 text-left">
                   Tasks Associated with CRQ{" "}
                   <span className="ml-1 px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
                     {tasks.length}

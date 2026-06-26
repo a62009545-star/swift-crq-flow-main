@@ -17,7 +17,7 @@ import {
 } from "@/components/crq/data";
 import { Sidebar } from "@/components/crq/Sidebar";
 import { Header } from "@/components/crq/Header";
-import { PdfModal } from "@/components/crq/PdfModal";
+import { PdfModal, ExecuteMopCreation } from "@/components/crq/PdfModal";
 import { MopUploadPanel } from "@/components/crq/MopUploadModal";
 import { ValidationModal } from "@/components/crq/ValidationModal";
 import { ImpactAnalysisPanel } from "@/components/crq/ImpactAnalysisModal";
@@ -46,6 +46,9 @@ import {
   X,
   ListTodo,
   Search,
+  Download,
+  Zap,
+  BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -82,6 +85,116 @@ const RESCHEDULE_REASONS = [
   "Regulatory / Compliance Hold",
   "Other",
 ];
+
+// ─── Network Execution reschedule reasons (postpone-only) ───────────────────
+
+type ExecRescheduleReason = "Resource Unavailability" | "Partial Completion" | "Zero Completion";
+
+const EXEC_RESCHEDULE_REASONS: { id: ExecRescheduleReason; desc: string }[] = [
+  {
+    id: "Resource Unavailability",
+    desc: "Engineer, tool, or site access not available for the scheduled window.",
+  },
+  {
+    id: "Partial Completion",
+    desc: "Some tasks under this CRQ are done, the rest are still open.",
+  },
+  {
+    id: "Zero Completion",
+    desc: "No tasks under this CRQ have been completed yet.",
+  },
+];
+
+// Reads the real task list for a CRQ and tells us what state execution is actually in.
+function getExecCompletionState(crqId: string): {
+  completed: Task[];
+  pending: Task[];
+  total: number;
+} {
+  const tasks = TASKS_BY_CRQ[crqId] ?? TASKS_BY_CRQ.default;
+  const completed = tasks.filter((t) => t.status === "Completed" || t.status === "Closed" || t.status === "Done");
+  const pending = tasks.filter((t) => !(t.status === "Completed" || t.status === "Closed" || t.status === "Done"));
+  return { completed, pending, total: tasks.length };
+}
+
+// ─── Per-stage reschedule rules (role-aware) ──────────────────────────────────
+
+type RoleRules = {
+  impactedParties: string[];
+  circleSPOC: string[];
+  noc: string[];
+};
+
+const STAGE_RESCHEDULE_RULES: Record<string, RoleRules> = {
+  mop: {
+    impactedParties: ["Not applicable at this stage."],
+    circleSPOC: ["Not applicable at this stage."],
+    noc: [
+      "Can postpone or prepone the activity.",
+      "Prepone only allowed if MOP creation → execution gap is greater than 4 days.",
+      "Postponement beyond 48 hours after MOP creation will retrigger MOP Validation.",
+      "Reason for rescheduling is mandatory.",
+    ],
+  },
+  schedule: {
+    impactedParties: [
+      "Can reschedule during the Impacted Party Approval stage only.",
+      "Postponement only — prepone is not permitted.",
+      "Rescheduling allowed only once per impacted party.",
+      "Allowed only within the active approval/rejection action window.",
+    ],
+    circleSPOC: [
+      "Can reschedule during CAB stages only.",
+      "Postponement only — prepone is not permitted.",
+      "Rescheduling will retrigger impacted party approvals.",
+      "Allowed only within the active CAB session.",
+    ],
+    noc: [
+      "Can reschedule at any stage, even within 24 hours before execution.",
+      "Postpone and prepone both allowed.",
+      "All other impacted approvers must re-approve on the new date.",
+      "SLA and escalation timelines recalculated from the new date.",
+      "Reason for rescheduling is mandatory.",
+    ],
+  },
+  exec: {
+    impactedParties: [
+      "Not allowed — only NOC (Admin) can reschedule once execution is scheduled.",
+    ],
+    circleSPOC: [
+      "Not allowed — only NOC (Admin) can reschedule once execution is scheduled.",
+    ],
+    noc: [
+      "Postpone only — prepone is not permitted at this stage.",
+      "Resource Unavailability: standard postpone, no fixed time gate.",
+      "Partial Completion (some tasks done): postpone allowed within 24 hours; beyond that requires Domain Head approval.",
+      "Zero Completion (no tasks done): postpone allowed within 48 hours; beyond that requires Domain Head approval and retriggers MOP Validation.",
+      "Requestor and Impacted Parties are notified for every reschedule, regardless of reason.",
+      "Reason for rescheduling is mandatory.",
+    ],
+  },
+  closure: {
+    impactedParties: [
+      "Not allowed — only NOC (Admin) can reschedule at this stage.",
+    ],
+    circleSPOC: [
+      "Not allowed — only NOC (Admin) can reschedule at this stage.",
+    ],
+    noc: [
+      "Partial completion: new activity window must be selected within 48 hours.",
+      "Completed and pending task details remain visible during the update.",
+      "Scheduled activity date and time will shift to the newly selected slot.",
+      "Reason for rescheduling is mandatory.",
+    ],
+  },
+};
+
+const STAGE_RESCHEDULE_FOOTER: Record<string, string> = {
+  mop: "Workflow continues from the current stage after rescheduling, unless scope changes — which restarts from CRQ Validation.",
+  schedule: "Once rescheduled, all impacted parties must re-approve on the new date. Partially blocked slots remain available for enterprise reschedules.",
+  exec: "Workflow continues from the current stage. Completed and pending task status is preserved and shown during the update. Requestor and Impacted Parties are notified once the new slot is confirmed.",
+  closure: "Workflow continues from the current stage. The activity window will shift to the newly selected slot.",
+};
 
 const STAGE_GOVERNANCE: Record<string, { bold: string | null; text: string }[]> = {
   mop_postpone: [
@@ -141,6 +254,98 @@ function daysBetween(a: Date, b: Date) {
   return (b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24);
 }
 
+// ─── Reschedule Disclaimer ────────────────────────────────────────────────────
+
+function RescheduleDisclaimer({ govKey }: { govKey: string }) {
+  const rules = STAGE_RESCHEDULE_RULES[govKey];
+  const footer = STAGE_RESCHEDULE_FOOTER[govKey];
+  if (!rules) return null;
+
+  const roles: {
+    key: keyof RoleRules;
+    label: string;
+    restricted: boolean;
+  }[] = [
+    {
+      key: "impactedParties",
+      label: "Impacted parties",
+      restricted:
+        rules.impactedParties[0].startsWith("Not allowed") ||
+        rules.impactedParties[0].startsWith("Not applicable"),
+    },
+    {
+      key: "circleSPOC",
+      label: "Circle SPOC",
+      restricted:
+        rules.circleSPOC[0].startsWith("Not allowed") ||
+        rules.circleSPOC[0].startsWith("Not applicable"),
+    },
+    {
+      key: "noc",
+      label: "NOC (admin)",
+      restricted: false,
+    },
+  ];
+
+  return (
+    <div className="rounded-lg border border-blue-100 overflow-hidden text-[11px]">
+      <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border-b border-blue-100">
+        <ShieldAlert className="h-3.5 w-3.5 text-blue-600 shrink-0" />
+        <span className="font-semibold text-blue-800">Rescheduling rules for this stage</span>
+      </div>
+      <div className="grid grid-cols-3 divide-x divide-slate-100 bg-white">
+        {roles.map((role) => (
+          <div
+            key={role.key}
+            className={cn("p-3", role.restricted ? "bg-red-50/40" : "bg-green-50/30")}
+          >
+            <div
+              className={cn(
+                "flex items-center gap-1.5 font-semibold text-[10px] uppercase tracking-widest mb-2",
+                role.restricted ? "text-red-700" : "text-green-700"
+              )}
+            >
+              <span
+                className={cn(
+                  "w-4 h-4 rounded flex items-center justify-center shrink-0",
+                  role.restricted ? "bg-red-100" : "bg-green-100"
+                )}
+              >
+                {role.restricted ? (
+                  <XCircle className="h-2.5 w-2.5 text-red-500" />
+                ) : (
+                  <CheckCircle2 className="h-2.5 w-2.5 text-green-500" />
+                )}
+              </span>
+              {role.label}
+            </div>
+            <ul className="space-y-1">
+              {rules[role.key].map((rule, i) => (
+                <li
+                  key={i}
+                  className={cn(
+                    "flex gap-1.5 leading-relaxed",
+                    role.restricted ? "text-red-800" : "text-green-900"
+                  )}
+                >
+                  <span className="shrink-0 mt-0.5">•</span>
+                  <span>{rule}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+      {footer && (
+        <div className="px-3 py-2 bg-blue-50/60 border-t border-blue-100 flex items-start gap-1.5">
+          <AlertTriangle className="h-3 w-3 text-blue-500 mt-0.5 shrink-0" />
+          <span className="text-[10px] text-blue-800 leading-relaxed">{footer}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Governance Box ───────────────────────────────────────────────────────────
 
 function GovernanceBox({ rules }: { rules: { bold: string | null; text: string }[] }) {
@@ -198,6 +403,7 @@ function RescheduleForm({ govKey, onSubmit }: { govKey: string; onSubmit: (d: { 
 
   return (
     <div className="space-y-4">
+      <RescheduleDisclaimer govKey={govKey} />
       <GovernanceBox rules={STAGE_GOVERNANCE[govKey] ?? []} />
       <div>
         <div className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold mb-2">New Proposed Date & Time Range</div>
@@ -292,6 +498,8 @@ function MopReschedulePanel({ crqId, reviewStart }: { crqId: string; reviewStart
 
   return (
     <div className="space-y-4">
+      <RescheduleDisclaimer govKey="mop" />
+
       {hasMop ? (
         <div className="flex items-center gap-2 rounded-lg bg-green-50 border border-green-100 px-3 py-2">
           <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
@@ -304,9 +512,11 @@ function MopReschedulePanel({ crqId, reviewStart }: { crqId: string; reviewStart
           <span>MOP not yet created — direct postponement allowed.</span>
         </div>
       )}
+
       {confirmMsg && (
         <ConfirmBanner message={confirmMsg} onConfirm={() => { setConfirmMsg(null); setSubmitted(true); }} onCancel={() => setConfirmMsg(null)} />
       )}
+
       {hasMop && (
         <div>
           <div className="text-[10px] uppercase tracking-widest text-slate-700 font-bold mb-2">Reschedule Type <span className="text-red-500">*</span></div>
@@ -324,6 +534,7 @@ function MopReschedulePanel({ crqId, reviewStart }: { crqId: string; reviewStart
           </div>
         </div>
       )}
+
       {type && (
         <>
           <GovernanceBox rules={STAGE_GOVERNANCE[govKey] ?? []} />
@@ -365,6 +576,238 @@ function MopReschedulePanel({ crqId, reviewStart }: { crqId: string; reviewStart
   );
 }
 
+// ─── Network Execution Reschedule Panel ──────────────────────────────────────
+
+function ExecReschedulePanel({ crqId }: { crqId: string }) {
+  const { completed, pending, total } = getExecCompletionState(crqId);
+  const actualCompletionReason: ExecRescheduleReason =
+    completed.length === 0 ? "Zero Completion" : pending.length === 0 ? "Resource Unavailability" : "Partial Completion";
+
+  const [reason, setReason] = useState<ExecRescheduleReason | null>(null);
+  const [startDT, setStartDT] = useState("");
+  const [endDT, setEndDT] = useState("");
+  const [domainHeadApproval, setDomainHeadApproval] = useState(false);
+  const [confirmMsg, setConfirmMsg] = useState<string | null>(null);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitted, setSubmitted] = useState(false);
+
+  // Mismatch hint: if the user picks a completion-based reason that doesn't match real task data.
+  const reasonMismatch =
+    reason &&
+    (reason === "Partial Completion" || reason === "Zero Completion") &&
+    reason !== actualCompletionReason &&
+    actualCompletionReason !== "Resource Unavailability";
+
+  const thresholdHours = reason === "Partial Completion" ? 24 : reason === "Zero Completion" ? 48 : null;
+
+  function hoursFromNow(d: Date) {
+    return hoursBetween(new Date(), d);
+  }
+
+  function needsDomainHeadApproval(): boolean {
+    if (!thresholdHours || !startDT) return false;
+    const newStart = new Date(startDT);
+    return hoursFromNow(newStart) > thresholdHours;
+  }
+
+  function validate() {
+    const e: Record<string, string> = {};
+    if (!reason) e.reason = "Please select a reason.";
+    if (!startDT) e.startDT = "Required.";
+    if (!endDT) e.endDT = "Required.";
+    if (startDT && endDT && new Date(endDT) <= new Date(startDT)) e.endDT = "End must be after start.";
+    if (needsDomainHeadApproval() && !domainHeadApproval) {
+      e.domainHeadApproval = "Domain Head approval is required for this delay.";
+    }
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  }
+
+  function handleSubmit() {
+    if (!validate()) return;
+    if (reason === "Zero Completion") {
+      setConfirmMsg(
+        "This reschedule will retrigger the MOP Validation stage, since no tasks have been completed yet. Requestor and Impacted Parties will be notified of the new schedule. Do you want to continue?"
+      );
+      return;
+    }
+    setSubmitted(true);
+  }
+
+  if (submitted) {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center gap-2 rounded-lg bg-green-50 border border-green-100 px-4 py-3">
+          <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
+          <span className="text-sm text-green-800 font-medium">Reschedule submitted successfully.</span>
+        </div>
+        <div className="flex items-center gap-2 rounded-lg bg-blue-50 border border-blue-100 px-4 py-2.5">
+          <ShieldAlert className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+          <span className="text-[11px] text-blue-800">Requestor and Impacted Parties have been notified of the updated schedule.</span>
+        </div>
+        {reason === "Zero Completion" && (
+          <div className="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-100 px-4 py-2.5">
+            <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+            <span className="text-[11px] text-amber-800">MOP Validation has been retriggered for this CRQ.</span>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <RescheduleDisclaimer govKey="exec" />
+
+      {confirmMsg && (
+        <ConfirmBanner
+          message={confirmMsg}
+          onConfirm={() => { setConfirmMsg(null); setSubmitted(true); }}
+          onCancel={() => setConfirmMsg(null)}
+        />
+      )}
+
+      {/* Reason selection */}
+      <div>
+        <div className="text-[10px] uppercase tracking-widest text-slate-700 font-bold mb-2">
+          Reason for Reschedule <span className="text-red-500">*</span>
+        </div>
+        <div className="space-y-2">
+          {EXEC_RESCHEDULE_REASONS.map((r) => {
+            const active = reason === r.id;
+            return (
+              <button
+                key={r.id}
+                onClick={() => { setReason(r.id); setDomainHeadApproval(false); setErrors({}); }}
+                className={cn(
+                  "w-full text-left flex items-start gap-3 px-4 py-2.5 rounded-lg border-2 transition select-none",
+                  active ? "border-red-300 bg-red-50" : "border-slate-200 hover:bg-slate-50"
+                )}
+              >
+                <span className={cn("mt-0.5 w-3.5 h-3.5 rounded-full border-2 shrink-0", active ? "border-red-500 bg-red-500" : "border-slate-300")} />
+                <span>
+                  <span className={cn("block text-sm font-semibold", active ? "text-red-700" : "text-slate-700")}>{r.id}</span>
+                  <span className="block text-[11px] text-slate-500 mt-0.5">{r.desc}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        {errors.reason && <p className="text-[10px] text-red-500 mt-1">{errors.reason}</p>}
+      </div>
+
+      {/* Task snapshot — shown for either completion-based reason */}
+      {(reason === "Partial Completion" || reason === "Zero Completion") && (
+        <ExecTaskCompletionTable crqId={crqId} />
+      )}
+
+      {reasonMismatch && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+          <AlertTriangle className="h-3.5 w-3.5 text-amber-500 mt-0.5 shrink-0" />
+          <span className="text-[11px] text-amber-800 leading-relaxed">
+            Task data for this CRQ shows <strong>{completed.length}/{total}</strong> tasks completed, which looks more like{" "}
+            <strong>{actualCompletionReason}</strong>. You can still proceed, but double-check the reason matches the task board.
+          </span>
+        </div>
+      )}
+
+      {reason && (
+        <>
+          {/* Threshold-aware governance note */}
+          <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
+            <div className="flex items-center gap-2 text-blue-700 font-semibold text-xs mb-2">
+              <ShieldAlert className="h-3.5 w-3.5" /> Postponement Window
+            </div>
+            <ul className="space-y-1 text-[11px] text-blue-800">
+              {reason === "Resource Unavailability" && (
+                <li className="flex gap-1.5"><span>•</span><span>No fixed time gate for this reason — standard postpone applies. Requestor and Impacted Parties will still be notified.</span></li>
+              )}
+              {reason === "Partial Completion" && (
+                <>
+                  <li className="flex gap-1.5"><span>•</span><span>Postpone allowed within <strong>24 hours</strong> of now without extra approval.</span></li>
+                  <li className="flex gap-1.5"><span>•</span><span>Beyond 24 hours, <strong>Domain Head approval</strong> is required before submitting.</span></li>
+                  <li className="flex gap-1.5"><span>•</span><span>Completed and pending tasks remain visible throughout.</span></li>
+                </>
+              )}
+              {reason === "Zero Completion" && (
+                <>
+                  <li className="flex gap-1.5"><span>•</span><span>Postpone allowed within <strong>48 hours</strong> of now without extra approval.</span></li>
+                  <li className="flex gap-1.5"><span>•</span><span>Beyond 48 hours, <strong>Domain Head approval</strong> is required before submitting.</span></li>
+                  <li className="flex gap-1.5"><span>•</span><span><strong>MOP Validation will be retriggered</strong> for this CRQ once the reschedule is submitted.</span></li>
+                </>
+              )}
+            </ul>
+          </div>
+
+          {/* Date/time range */}
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-slate-700 font-bold mb-2">New Proposed Date & Time Range</div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[11px] text-slate-700 font-semibold mb-1 block">Start Date & Time <span className="text-red-500">*</span></label>
+                <input
+                  type="datetime-local"
+                  value={startDT}
+                  onChange={(e) => setStartDT(e.target.value)}
+                  className={cn("w-full text-sm border rounded-lg px-3 py-2 text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-red-300", errors.startDT ? "border-red-400" : "border-slate-200")}
+                />
+                {errors.startDT && <p className="text-[10px] text-red-500 mt-0.5">{errors.startDT}</p>}
+              </div>
+              <div>
+                <label className="text-[11px] text-slate-700 font-semibold mb-1 block">End Date & Time <span className="text-red-500">*</span></label>
+                <input
+                  type="datetime-local"
+                  value={endDT}
+                  onChange={(e) => setEndDT(e.target.value)}
+                  className={cn("w-full text-sm border rounded-lg px-3 py-2 text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-red-300", errors.endDT ? "border-red-400" : "border-slate-200")}
+                />
+                {errors.endDT && <p className="text-[10px] text-red-500 mt-0.5">{errors.endDT}</p>}
+              </div>
+            </div>
+          </div>
+
+          {/* Domain Head approval gate — only appears once threshold is exceeded */}
+          {needsDomainHeadApproval() && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="h-3.5 w-3.5 text-amber-500 mt-0.5 shrink-0" />
+                <span className="text-[11px] text-amber-800 leading-relaxed">
+                  The proposed slot exceeds the {thresholdHours}-hour window for <strong>{reason}</strong>. Domain Head approval is required to proceed.
+                </span>
+              </div>
+              <label className="flex items-center gap-2 text-[11px] text-amber-900 font-medium cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={domainHeadApproval}
+                  onChange={(e) => setDomainHeadApproval(e.target.checked)}
+                  className="accent-amber-600 h-3.5 w-3.5"
+                />
+                Domain Head has approved this extension
+              </label>
+              {errors.domainHeadApproval && <p className="text-[10px] text-red-500">{errors.domainHeadApproval}</p>}
+            </div>
+          )}
+
+          {/* Notification footer — always shown once a reason is picked */}
+          <div className="flex items-start gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2.5">
+            <ShieldAlert className="h-3.5 w-3.5 text-slate-400 mt-0.5 shrink-0" />
+            <span className="text-[11px] text-slate-600 leading-relaxed">
+              Requestor and Impacted Parties will be notified automatically once this reschedule is submitted.
+            </span>
+          </div>
+
+          <button
+            onClick={handleSubmit}
+            className="w-full py-2.5 text-sm font-semibold bg-red-600 text-white rounded-lg hover:bg-red-700 transition shadow-sm"
+          >
+            Submit Reschedule
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── Reschedule Accordion ─────────────────────────────────────────────────────
 
 function RescheduleAccordion({ label = "Reschedule", children }: { label?: string; children: React.ReactNode }) {
@@ -395,7 +838,6 @@ type Checkpoint = {
   attachments: string[];
 };
 
-// ─── Rejection details type shared across all stages ─────────────────────────
 type RejectionDetails = {
   pick: "PASS" | "FAILED" | "CANCELLED" | null;
   rejectionReason: string;
@@ -447,6 +889,57 @@ function TaskStatusBadge({ completed, total }: { completed: number; total: numbe
   );
 }
 
+// ─── Completed / Pending Task Table (for exec reschedule) ───────────────────
+
+function ExecTaskCompletionTable({ crqId }: { crqId: string }) {
+  const { completed, pending, total } = getExecCompletionState(crqId);
+
+  return (
+    <div className="rounded-lg border border-slate-200 overflow-hidden">
+      <div className="flex items-center justify-between px-3 py-2 bg-slate-50 border-b border-slate-100">
+        <span className="text-[10px] uppercase tracking-widest font-bold text-slate-500">Task Status Snapshot</span>
+        <span className="text-[11px] font-semibold text-slate-600">{completed.length}/{total} completed</span>
+      </div>
+      <div className="grid grid-cols-2 divide-x divide-slate-100">
+        <div className="p-3">
+          <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest font-bold text-green-700 mb-2">
+            <CheckCircle2 className="h-3 w-3" /> Completed ({completed.length})
+          </div>
+          {completed.length === 0 ? (
+            <p className="text-[11px] text-slate-400">None yet.</p>
+          ) : (
+            <ul className="space-y-1">
+              {completed.map((t) => (
+                <li key={t.id} className="flex items-center justify-between text-[11px]">
+                  <span className="font-mono text-slate-600">{t.id}</span>
+                  <span className="text-slate-400">{t.neLabel}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <div className="p-3">
+          <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest font-bold text-amber-700 mb-2">
+            <Clock className="h-3 w-3" /> Pending ({pending.length})
+          </div>
+          {pending.length === 0 ? (
+            <p className="text-[11px] text-slate-400">None — all tasks complete.</p>
+          ) : (
+            <ul className="space-y-1">
+              {pending.map((t) => (
+                <li key={t.id} className="flex items-center justify-between text-[11px]">
+                  <span className="font-mono text-slate-600">{t.id}</span>
+                  <span className="text-slate-400">{t.neLabel}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Tasks Modal ──────────────────────────────────────────────────────────────
 
 function TasksModal({ tasks, crqId, onClose }: { tasks: Task[]; crqId: string; onClose: () => void }) {
@@ -454,10 +947,6 @@ function TasksModal({ tasks, crqId, onClose }: { tasks: Task[]; crqId: string; o
   const filtered = tasks.filter((t) =>
     t.id.toLowerCase().includes(search.toLowerCase())
   );
-
-  const completedCount = tasks.filter((t) =>
-    t.status === "Completed" || t.status === "Closed" || t.status === "Done"
-  ).length;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -641,6 +1130,425 @@ function ValidationToast({
   );
 }
 
+// ─── Network Execution Panel ──────────────────────────────────────────────────
+
+type ExecTool = "infrasol" | "grasp";
+type ExecState = "idle" | "running" | "paused" | "finished";
+type ComparisonResult = "Pass" | "Fail" | null;
+
+function ReportActions({ label, filename }: { label: string; filename: string }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <button
+        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:border-indigo-300 hover:text-indigo-600 transition shadow-sm"
+        title={`Preview ${label}`}
+      >
+        <FileText className="h-3 w-3" />
+        Preview
+      </button>
+      <button
+        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold rounded-md border border-indigo-200 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition shadow-sm"
+        title={`Download ${filename}`}
+      >
+        <Download className="h-3 w-3" />
+        Download
+      </button>
+    </div>
+  );
+}
+
+function ExecToolPickerModal({
+  onSelect,
+  onCancel,
+}: {
+  onSelect: (tool: ExecTool) => void;
+  onCancel: () => void;
+}) {
+  const tools: { id: ExecTool; label: string; desc: string; icon: React.ElementType }[] = [
+    {
+      id: "infrasol",
+      label: "InfraSol",
+      desc: "Automated infrastructure orchestration & push-based execution",
+      icon: Zap,
+    },
+    {
+      id: "grasp",
+      label: "GRASP",
+      desc: "Guided real-time activity and script push framework",
+      icon: Activity,
+    },
+  ];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onCancel} />
+      <div className="relative bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md mx-4 p-6 space-y-4">
+        <div>
+          <h3 className="text-sm font-semibold text-slate-900">Select Execution Tool</h3>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Choose the tool to run the network activity against this CRQ.
+          </p>
+        </div>
+        <div className="space-y-3">
+          {tools.map((t) => {
+            const Icon = t.icon;
+            return (
+              <button
+                key={t.id}
+                onClick={() => onSelect(t.id)}
+                className="w-full flex items-start gap-4 px-4 py-3.5 rounded-xl border-2 border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/40 transition text-left group"
+              >
+                <div className="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0 group-hover:bg-indigo-100 transition">
+                  <Icon className="h-4 w-4 text-indigo-600" />
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-slate-800 group-hover:text-indigo-700 transition">
+                    {t.label}
+                  </div>
+                  <div className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">{t.desc}</div>
+                </div>
+                <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-indigo-400 transition shrink-0 ml-auto self-center" />
+              </button>
+            );
+          })}
+        </div>
+        <button
+          onClick={onCancel}
+          className="w-full py-2 text-xs font-semibold text-slate-500 hover:text-slate-700 transition"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ExecStartToast({ tool, onDone }: { tool: ExecTool; onDone: () => void }) {
+  const [visible, setVisible] = useState(true);
+  useEffect(() => {
+    const t = setTimeout(() => { setVisible(false); setTimeout(onDone, 300); }, 2500);
+    return () => clearTimeout(t);
+  }, [onDone]);
+
+  return (
+    <div
+      className={cn(
+        "fixed top-5 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-3 px-5 py-3 rounded-xl shadow-lg border border-indigo-100 bg-white transition-all duration-300 overflow-hidden",
+        visible ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-2"
+      )}
+    >
+      <div className="w-7 h-7 rounded-full bg-indigo-50 flex items-center justify-center shrink-0">
+        <Play className="h-3.5 w-3.5 text-indigo-600 fill-indigo-600" />
+      </div>
+      <div>
+        <p className="text-sm font-semibold text-slate-800 leading-tight">Execution Started Successfully</p>
+        <p className="text-[11px] text-slate-400 mt-0.5 capitalize">
+          Tool: {tool === "infrasol" ? "InfraSol" : "GRASP"}
+        </p>
+      </div>
+      <div
+        className="absolute bottom-0 left-0 h-0.5 bg-indigo-500 rounded-full"
+        style={{ width: "100%", animation: "shrink 2.5s linear forwards" }}
+      />
+      <style>{`@keyframes shrink { from { width: 100% } to { width: 0% } }`}</style>
+    </div>
+  );
+}
+
+function NetworkExecutionPanel({ crqId }: { crqId: string }) {
+  const [execState, setExecState] = useState<ExecState>("idle");
+  const [selectedTool, setSelectedTool] = useState<ExecTool | null>(null);
+  const [showToolPicker, setShowToolPicker] = useState(false);
+  const [showExecToast, setShowExecToast] = useState(false);
+  const [postCheckDone, setPostCheckDone] = useState(false);
+  const [comparison, setComparison] = useState<ComparisonResult>(null);
+
+  // Pre-check is "Yes" from CRQ data
+  const preCheckDone = true;
+  const executionFinished = execState === "finished";
+  const isRunning = execState === "running";
+  const isPaused = execState === "paused";
+
+  const allComplete = preCheckDone && executionFinished && postCheckDone && comparison === "Pass";
+
+  function handleToolSelect(tool: ExecTool) {
+    setSelectedTool(tool);
+    setShowToolPicker(false);
+    setExecState("running");
+    setShowExecToast(true);
+  }
+
+  const steps = [
+    { label: "Pre-Check", done: preCheckDone },
+    { label: "Execution", done: executionFinished },
+    { label: "Post-Check", done: postCheckDone },
+    { label: "Comparison", done: comparison === "Pass" },
+  ];
+  const activeStep = steps.findIndex((s) => !s.done);
+
+  return (
+    <>
+      {showExecToast && selectedTool && (
+        <ExecStartToast tool={selectedTool} onDone={() => setShowExecToast(false)} />
+      )}
+      {showToolPicker && (
+        <ExecToolPickerModal
+          onSelect={handleToolSelect}
+          onCancel={() => setShowToolPicker(false)}
+        />
+      )}
+
+      <div className="space-y-3">
+        {/* ── Progress stepper ── */}
+        <div className="flex items-center gap-0 mb-1">
+          {steps.map((step, i) => (
+            <div key={step.label} className="flex items-center flex-1">
+              <div className="flex flex-col items-center flex-1">
+                <div
+                  className={cn(
+                    "w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold border-2 transition-all duration-300",
+                    step.done
+                      ? "bg-green-500 border-green-500 text-white"
+                      : i === activeStep
+                      ? "bg-white border-indigo-500 text-indigo-600"
+                      : "bg-white border-slate-200 text-slate-400"
+                  )}
+                >
+                  {step.done ? <CheckCircle2 className="h-3.5 w-3.5" /> : i + 1}
+                </div>
+                <span
+                  className={cn(
+                    "text-[9px] uppercase tracking-wide font-semibold mt-1 text-center",
+                    step.done ? "text-green-600" : i === activeStep ? "text-indigo-600" : "text-slate-400"
+                  )}
+                >
+                  {step.label}
+                </span>
+              </div>
+              {i < steps.length - 1 && (
+                <div
+                  className={cn(
+                    "h-0.5 w-full mx-1 rounded-full transition-all duration-500",
+                    steps[i].done ? "bg-green-400" : "bg-slate-200"
+                  )}
+                />
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* ── 1. Pre-Check Status ── */}
+        <div className={cn("rounded-xl border px-4 py-3 transition-all duration-200", preCheckDone ? "border-green-200 bg-green-50/40" : "border-slate-200 bg-white")}>
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", preCheckDone ? "bg-green-400" : "bg-slate-300")} />
+              <span className="text-[10px] uppercase tracking-widest font-bold text-slate-500">Pre-Check Status</span>
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700 border border-green-200">
+                <CheckCircle2 className="h-3 w-3" /> Yes
+              </span>
+            </div>
+            <ReportActions label="Pre-Check Report" filename={`PRECHECK_${crqId}.pdf`} />
+          </div>
+        </div>
+
+        {/* ── 2. Execution ── */}
+        {preCheckDone && (
+          <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 space-y-3">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-2.5">
+                <div
+                  className={cn(
+                    "w-1.5 h-1.5 rounded-full shrink-0",
+                    executionFinished ? "bg-green-400" : isRunning ? "bg-indigo-400 animate-pulse" : "bg-slate-300"
+                  )}
+                />
+                <span className="text-[10px] uppercase tracking-widest font-bold text-slate-500">Execution</span>
+                {executionFinished && (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 border border-indigo-200">
+                    <CheckCheck className="h-3 w-3" /> Finished
+                  </span>
+                )}
+                {isRunning && (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 border border-indigo-200">
+                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
+                    Running
+                    {selectedTool && (
+                      <span className="opacity-60 font-normal capitalize ml-0.5">
+                        · {selectedTool === "infrasol" ? "InfraSol" : "GRASP"}
+                      </span>
+                    )}
+                  </span>
+                )}
+                {isPaused && (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200">
+                    <Pause className="h-3 w-3" /> Paused
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                {execState === "idle" && (
+                  <button
+                    onClick={() => setShowToolPicker(true)}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 transition shadow-sm"
+                  >
+                    <Play className="h-3.5 w-3.5 fill-white" />
+                    Start Execution
+                  </button>
+                )}
+                {isRunning && (
+                  <>
+                    <button
+                      onClick={() => setExecState("paused")}
+                      className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 text-xs font-semibold hover:bg-amber-100 transition shadow-sm"
+                    >
+                      <Pause className="h-3.5 w-3.5" /> Pause
+                    </button>
+                    <button
+                      onClick={() => setExecState("finished")}
+                      className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-green-600 text-white text-xs font-semibold hover:bg-green-700 transition shadow-sm"
+                    >
+                      <CheckCheck className="h-3.5 w-3.5" /> Finish
+                    </button>
+                  </>
+                )}
+                {isPaused && (
+                  <>
+                    <button
+                      onClick={() => { setExecState("running"); setShowExecToast(true); }}
+                      className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 bg-white text-slate-700 text-xs font-semibold hover:bg-slate-50 transition shadow-sm"
+                    >
+                      <Play className="h-3.5 w-3.5" /> Resume
+                    </button>
+                    <button
+                      onClick={() => setExecState("finished")}
+                      className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-green-600 text-white text-xs font-semibold hover:bg-green-700 transition shadow-sm"
+                    >
+                      <CheckCheck className="h-3.5 w-3.5" /> Finish
+                    </button>
+                  </>
+                )}
+                {executionFinished && (
+                  <ReportActions label="Execution Report" filename={`EXEC_${crqId}.pdf`} />
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── 3. Post-Check Status ── */}
+        {executionFinished && (
+          <div className={cn("rounded-xl border px-4 py-3 transition-all duration-200", postCheckDone ? "border-green-200 bg-green-50/40" : "border-slate-200 bg-white")}>
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", postCheckDone ? "bg-green-400" : "bg-slate-300")} />
+                <span className="text-[10px] uppercase tracking-widest font-bold text-slate-500">Post-Check Status</span>
+                {postCheckDone && (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700 border border-green-200">
+                    <CheckCircle2 className="h-3 w-3" /> Yes
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {!postCheckDone ? (
+                  <button
+                    onClick={() => setPostCheckDone(true)}
+                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-green-200 bg-green-50 text-green-700 text-xs font-semibold hover:bg-green-100 transition shadow-sm"
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    Mark Post-Check Done
+                  </button>
+                ) : (
+                  <ReportActions label="Post-Check Report" filename={`POSTCHECK_${crqId}.pdf`} />
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── 4. Pre & Post Check Comparison ── */}
+        {postCheckDone && (
+          <div className="rounded-xl border border-slate-200 bg-white px-4 py-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <BarChart3 className="h-4 w-4 text-slate-400" />
+              <span className="text-xs font-semibold text-slate-700 uppercase tracking-widest">
+                Pre &amp; Post Check Comparison
+              </span>
+              <span className="text-red-500 text-xs">*</span>
+              <span className="ml-auto text-[10px] text-slate-400 font-medium">Mandatory</span>
+            </div>
+            <div className="flex gap-3">
+              {(["Pass", "Fail"] as const).map((opt) => (
+                <button
+                  key={opt}
+                  onClick={() => setComparison(opt)}
+                  className={cn(
+                    "flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg border-2 text-sm font-semibold transition-all duration-150",
+                    comparison === opt
+                      ? opt === "Pass"
+                        ? "border-green-400 bg-green-50 text-green-700 shadow-sm scale-[1.02]"
+                        : "border-red-400 bg-red-50 text-red-700 shadow-sm scale-[1.02]"
+                      : "border-slate-200 text-slate-400 hover:border-slate-300 hover:text-slate-600"
+                  )}
+                >
+                  {opt === "Pass" ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
+                  {opt}
+                </button>
+              ))}
+            </div>
+            {comparison && (
+              <ReportActions label="Comparison Report" filename={`COMPARE_${crqId}.pdf`} />
+            )}
+          </div>
+        )}
+
+        {/* ── Completion banner ── */}
+        {allComplete && (
+          <div className="rounded-xl border border-green-200 bg-gradient-to-r from-green-50 to-emerald-50 px-5 py-4 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center shrink-0">
+              <CheckCheck className="h-5 w-5 text-green-600" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-green-900">Network Execution Complete</p>
+              <p className="text-[11px] text-green-700 mt-0.5 leading-relaxed">
+                All checks passed. Pre-check, execution, post-check, and comparison are verified. This stage is ready for Task Closure.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* ── Completion checklist ── */}
+        {!allComplete && (
+          <div className="rounded-lg border border-slate-100 bg-slate-50 px-4 py-3">
+            <div className="text-[9px] uppercase tracking-widest font-bold text-slate-400 mb-2">
+              Stage Completion Checklist
+            </div>
+            <div className="space-y-1.5">
+              {[
+                { label: "Pre-Check Status = Yes", done: preCheckDone },
+                { label: "Execution Status = Finished", done: executionFinished },
+                { label: "Post-Check Status = Yes", done: postCheckDone },
+                { label: "Pre & Post Check Comparison = Pass", done: comparison === "Pass" },
+              ].map((item) => (
+                <div key={item.label} className="flex items-center gap-2">
+                  {item.done ? (
+                    <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
+                  ) : (
+                    <Clock className="h-3.5 w-3.5 text-slate-300 shrink-0" />
+                  )}
+                  <span className={cn("text-[11px] font-medium", item.done ? "text-green-700 line-through decoration-green-400/60" : "text-slate-500")}>
+                    {item.label}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 function CrqDetail() {
@@ -651,13 +1559,13 @@ function CrqDetail() {
   const [executionState, setExecutionState] = useState<"idle" | "running" | "paused" | "finished">("idle");
   const [showToast, setShowToast] = useState(false);
 
-  // ── Validation toast state ────────────────────────────────────────────────
+  const [mopAutoFilename, setMopAutoFilename] = useState<string | undefined>(undefined);
+
   const [validationToast, setValidationToast] = useState<{
     pick: "PASS" | "FAILED" | "CANCELLED";
     stageName: string;
   } | null>(null);
 
-  // ── Unified per-stage rejection state ────────────────────────────────────
   const [stageRejections, setStageRejections] = useState<Record<string, RejectionDetails>>({});
 
   function handleStageRejectionChange(stageName: string, update: Partial<RejectionDetails>) {
@@ -671,24 +1579,10 @@ function CrqDetail() {
     }));
   }
 
-  // Called when any validation section submits
   function handleValidationSubmit(stageName: string, pick: "PASS" | "FAILED" | "CANCELLED") {
     handleStageRejectionChange(stageName, { pick });
     setValidationToast({ pick, stageName });
   }
-
-  // Legacy adapter used by ValidationSection
-  const validationPicks = Object.fromEntries(
-    Object.entries(stageRejections).map(([k, v]) => [k, v.pick])
-  ) as Record<string, "PASS" | "FAILED" | "CANCELLED" | null>;
-
-  const validationDetails = Object.fromEntries(
-    Object.entries(stageRejections).map(([k, v]) => [k, {
-      rejectionReason: v.rejectionReason,
-      rejectionOwner: v.rejectionOwner,
-      rejectionDeviationReason: v.rejectionDeviationReason,
-    }])
-  ) as Record<string, { rejectionReason: string; rejectionOwner: string; rejectionDeviationReason: string }>;
 
   const currentStageName = stage ? STAGE_ID_TO_NAME[stage] : undefined;
 
@@ -714,6 +1608,17 @@ function CrqDetail() {
           onDone={() => setValidationToast(null)}
         />
       )}
+
+      <PdfModal
+        open={pdfOpen}
+        onClose={() => setPdfOpen(false)}
+        crqId={crq?.id}
+        showMopCreation={stage === "mop"}
+        onMopReady={(_toolId, filename) => {
+          setMopAutoFilename(filename);
+          setPdfOpen(false);
+        }}
+      />
 
       <div className="ml-[220px] pt-14">
         <div className="px-5 py-5 max-w-[1400px]">
@@ -823,6 +1728,8 @@ function CrqDetail() {
                 stage={stage}
                 currentStageName={currentStageName}
                 stageRejections={stageRejections}
+                mopAutoFilename={mopAutoFilename}
+                onMopReady={(_toolId, filename) => setMopAutoFilename(filename)}
                 onPickChange={(pick) => {
                   const stageName = stage ? STAGE_ID_TO_NAME[stage] : undefined;
                   if (stageName && pick) handleStageRejectionChange(stageName, { pick });
@@ -840,7 +1747,6 @@ function CrqDetail() {
           )}
         </div>
       </div>
-      <PdfModal open={pdfOpen} onClose={() => setPdfOpen(false)} />
     </div>
   );
 }
@@ -1249,6 +2155,10 @@ function CRQAttributesSection({
                 <RescheduleAccordion label="Reschedule CRQ">
                   <MopReschedulePanel crqId={crq.id} reviewStart={crq.reviewStart} />
                 </RescheduleAccordion>
+              ) : active === "Network Execution" ? (
+                <RescheduleAccordion label="Reschedule CRQ">
+                  <ExecReschedulePanel crqId={crq.id} />
+                </RescheduleAccordion>
               ) : (
                 <RescheduleAccordion label={reschedCfg.label}>
                   <RescheduleForm govKey={reschedCfg.govKey} onSubmit={(d) => console.log("Reschedule submitted", { stage: active, ...d })} />
@@ -1303,8 +2213,7 @@ function MopValidationPanel({
             current.pick === "FAILED" ? "text-red-800" :
             "text-slate-700"
           )}>
-            Validation submitted —{" "}
-            <span className="font-semibold">{current.pick}</span>
+            Validation submitted — <span className="font-semibold">{current.pick}</span>
           </span>
         </div>
       </div>
@@ -1413,6 +2322,8 @@ function ValidationSection({
   stage,
   currentStageName,
   stageRejections,
+  mopAutoFilename,
+  onMopReady,
   onPickChange,
   onDetailsChange,
   onSubmit,
@@ -1421,6 +2332,8 @@ function ValidationSection({
   stage?: string;
   currentStageName?: string;
   stageRejections: Record<string, RejectionDetails>;
+  mopAutoFilename?: string;
+  onMopReady?: (toolId: "infrasol" | "grasp", filename: string) => void;
   onPickChange: (v: "PASS" | "FAILED" | "CANCELLED" | null) => void;
   onDetailsChange?: (details: Partial<RejectionDetails>) => void;
   onSubmit?: (pick: "PASS" | "FAILED" | "CANCELLED") => void;
@@ -1429,10 +2342,18 @@ function ValidationSection({
   const current = stageName ? stageRejections[stageName] : undefined;
   const currentPick = current?.pick ?? null;
 
-  // Local submitted state for plan stage
   const [planSubmitted, setPlanSubmitted] = useState(false);
 
-  if (stage === "exec" || stage === "closure") return null;
+  if (stage === "closure") return null;
+
+  // ── Network Execution stage: full enhanced workflow ───────────────────────
+  if (stage === "exec") {
+    return (
+      <Section title="Validation" subtitle="Network Execution">
+        <NetworkExecutionPanel crqId={crq.id} />
+      </Section>
+    );
+  }
 
   if (stage === "mopv") {
     return (
@@ -1452,8 +2373,17 @@ function ValidationSection({
 
   if (stage === "mop") {
     return (
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <MopUploadPanel crqId={crq.id} />
+      <div className="space-y-3">
+        <ExecuteMopCreation
+          crqId={crq.id}
+          onMopReady={(toolId, filename) => onMopReady?.(toolId, filename)}
+        />
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <MopUploadPanel
+            crqId={crq.id}
+            prefilledFilename={mopAutoFilename}
+          />
+        </div>
       </div>
     );
   }
@@ -1482,7 +2412,6 @@ function ValidationSection({
   }
 
   if (stage === "plan") {
-    // ── Submitted state for plan stage ──
     if (planSubmitted) {
       return (
         <Section title="Validation" subtitle="CRQ Validation">
@@ -1500,8 +2429,7 @@ function ValidationSection({
               currentPick === "FAILED" ? "text-red-800" :
               "text-slate-700"
             )}>
-              Validation submitted —{" "}
-              <span className="font-semibold">{currentPick}</span>
+              Validation submitted — <span className="font-semibold">{currentPick}</span>
             </span>
           </div>
         </Section>
@@ -1568,7 +2496,6 @@ function ValidationSection({
                 <textarea rows={4} placeholder="Add your remarks…"
                   className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition resize-none" />
               </div>
-              {/* ── Submit button for plan stage ── */}
               <div className="flex items-center justify-between pt-2 border-t border-slate-100">
                 <button
                   onClick={() => {
@@ -1695,8 +2622,7 @@ function ValidationPanel({
           pick === "FAILED" ? "text-red-800" :
           "text-slate-700"
         )}>
-          Validation submitted —{" "}
-          <span className="font-semibold">{pick}</span>
+          Validation submitted — <span className="font-semibold">{pick}</span>
         </span>
       </div>
     );
@@ -1722,7 +2648,6 @@ function ValidationPanel({
           <textarea rows={4} placeholder="Add your remarks…"
             className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition resize-none" />
         </div>
-        {/* ── Submit / Reset row ── */}
         <div className="flex items-center justify-between pt-2 border-t border-slate-100">
           <button
             onClick={() => { setPick(null); onPickChange?.(null); }}
