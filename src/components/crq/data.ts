@@ -15,6 +15,7 @@ export const EMPLOYEES: Employee[] = [
   { id: "B0318792", name: "Prabhu M" },
 ];
 
+
 export const ASSIGNMENT_COLUMNS = [
   "CRQ Review",
   "Impact Analysis",
@@ -48,7 +49,10 @@ export const ASSIGNMENT_ROWS: AssignmentRow[] = [
   { crq: "CRQ000006194188", values: [e("B0723451"), e("B0834512"), e("B0945123"), null, null, null, null] },
 ];
 
-export type ReviewStatus = "Pause" | "Approved" | "Canceled" | "In Review" | "Non Service Affecting";
+export type ReviewStatus = "Approved" | "Pending for Approval" | "Rejected";
+
+export type CRQOwnership = "CCB" | "SE";
+
 export type CRQRecord = {
   id: string;
   status: ReviewStatus;
@@ -57,6 +61,7 @@ export type CRQRecord = {
   reviewEnd: string;
   impact: string;
   vendor: string;
+  ownership: CRQOwnership;
   crqStatus?: string;
   location?: string;
 };
@@ -70,41 +75,41 @@ export type Plan = {
 
 export const PLANS: Plan[] = [
   { id: "CEN/AC/CRD-A/MOB/06032026/002", type: "Card Addition", description: "test change", crqs: [
-    { id: "CRQ000005983410", status: "Approved", olmid: "B0945123", reviewStart: "06-Mar-2026 09:00", reviewEnd: "06-Mar-2026 09:30", impact: "Non Service Affecting", vendor: "NOKIA", location: "GURGAON-GRG" },
-    { id: "CRQ000005983411", status: "Pause", olmid: "B1056234", reviewStart: "06-Mar-2026 10:00", reviewEnd: "06-Mar-2026 10:30", impact: "Service Affecting", vendor: "CISCO", location: "DELHI-DEL" },
+    { id: "CRQ000005983410", status: "Approved", olmid: "B0945123", reviewStart: "06-Mar-2026 09:00", reviewEnd: "06-Mar-2026 09:30", impact: "Non Service Affecting", vendor: "NOKIA", ownership: "CCB", location: "GURGAON-GRG" },
+    { id: "CRQ000005983411", status: "Pending for Approval", olmid: "B1056234", reviewStart: "06-Mar-2026 10:00", reviewEnd: "06-Mar-2026 10:30", impact: "Service Affecting", vendor: "CISCO", ownership: "SE", location: "DELHI-DEL" },
   ]},
   { id: "CEN/AC/CRD-A/MOB/10032026/001", type: "Card Addition", description: "test change", crqs: [
-    { id: "CRQ000005983526", status: "Pause", olmid: "B0096168", reviewStart: "15-May-2026 12:06", reviewEnd: "15-May-2026 12:06", impact: "Non Service Affecting", vendor: "ALCATEL", location: "GURGAON-GRG" },
-    { id: "CRQ000005983527", status: "Approved", olmid: "B0316607", reviewStart: "20-Feb-2026 01:00", reviewEnd: "20-Feb-2026 01:30", impact: "Service Affecting", vendor: "NOKIA", location: "MUMBAI-BOM" },
-    { id: "CRQ000005983528", status: "Canceled", olmid: "B0542190", reviewStart: "18-Feb-2026 09:00", reviewEnd: "18-Feb-2026 09:30", impact: "Non Service Affecting", vendor: "ERICSSON", location: "DELHI-DEL" },
-    { id: "CRQ000005983529", status: "In Review", olmid: "B0612345", reviewStart: "10-Mar-2026 03:00", reviewEnd: "10-Mar-2026 03:45", impact: "Service Affecting", vendor: "NOKIA", location: "BANGALORE-BLR" },
-    { id: "CRQ000005983530", status: "Non Service Affecting", olmid: "B0723451", reviewStart: "10-Mar-2026 06:00", reviewEnd: "10-Mar-2026 06:30", impact: "Non Service Affecting", vendor: "CISCO", location: "CHENNAI-MAA" },
+    { id: "CRQ000005983526", status: "Pending for Approval", olmid: "B0096168", reviewStart: "15-May-2026 12:06", reviewEnd: "15-May-2026 12:06", impact: "Non Service Affecting", vendor: "ALCATEL", ownership: "CCB", location: "GURGAON-GRG" },
+    { id: "CRQ000005983527", status: "Approved", olmid: "B0316607", reviewStart: "20-Feb-2026 01:00", reviewEnd: "20-Feb-2026 01:30", impact: "Service Affecting", vendor: "NOKIA", ownership: "SE", location: "MUMBAI-BOM" },
+    { id: "CRQ000005983528", status: "Rejected", olmid: "B0542190", reviewStart: "18-Feb-2026 09:00", reviewEnd: "18-Feb-2026 09:30", impact: "Non Service Affecting", vendor: "ERICSSON", ownership: "CCB", location: "DELHI-DEL" },
+    { id: "CRQ000005983529", status: "Pending for Approval", olmid: "B0612345", reviewStart: "10-Mar-2026 03:00", reviewEnd: "10-Mar-2026 03:45", impact: "Service Affecting", vendor: "NOKIA", ownership: "SE", location: "BANGALORE-BLR" },
+    { id: "CRQ000005983530", status: "Approved", olmid: "B0723451", reviewStart: "10-Mar-2026 06:00", reviewEnd: "10-Mar-2026 06:30", impact: "Non Service Affecting", vendor: "CISCO", ownership: "CCB", location: "CHENNAI-MAA" },
   ]},
   { id: "CEN/AC/CRD-A/B2B/12032026/001", type: "Card Addition", description: "test change", crqs: [
-    { id: "CRQ000005983601", status: "In Review", olmid: "B0612345", reviewStart: "01-Mar-2026 08:00", reviewEnd: "01-Mar-2026 08:30", impact: "Service Affecting", vendor: "CISCO", location: "PUNE-PNQ" },
-    { id: "CRQ000005983602", status: "Approved", olmid: "B0723451", reviewStart: "12-Mar-2026 02:00", reviewEnd: "12-Mar-2026 02:30", impact: "Non Service Affecting", vendor: "NOKIA", location: "PUNE-PNQ" },
-    { id: "CRQ000005983603", status: "Pause", olmid: "B0834512", reviewStart: "12-Mar-2026 04:00", reviewEnd: "12-Mar-2026 04:30", impact: "Service Affecting", vendor: "ALCATEL", location: "HYDERABAD-HYD" },
+    { id: "CRQ000005983601", status: "Pending for Approval", olmid: "B0612345", reviewStart: "01-Mar-2026 08:00", reviewEnd: "01-Mar-2026 08:30", impact: "Service Affecting", vendor: "CISCO", ownership: "SE", location: "PUNE-PNQ" },
+    { id: "CRQ000005983602", status: "Approved", olmid: "B0723451", reviewStart: "12-Mar-2026 02:00", reviewEnd: "12-Mar-2026 02:30", impact: "Non Service Affecting", vendor: "NOKIA", ownership: "CCB", location: "PUNE-PNQ" },
+    { id: "CRQ000005983603", status: "Pending for Approval", olmid: "B0834512", reviewStart: "12-Mar-2026 04:00", reviewEnd: "12-Mar-2026 04:30", impact: "Service Affecting", vendor: "ALCATEL", ownership: "SE", location: "HYDERABAD-HYD" },
   ]},
   { id: "CEN/AC/CRD-A/MOB/16032026/001", type: "Card Addition", description: "test change", crqs: [
-    { id: "CRQ000005983710", status: "Approved", olmid: "B0723451", reviewStart: "16-Mar-2026 11:00", reviewEnd: "16-Mar-2026 11:45", impact: "Non Service Affecting", vendor: "NOKIA", location: "GURGAON-GRG" },
-    { id: "CRQ000005983711", status: "In Review", olmid: "B0834512", reviewStart: "16-Mar-2026 12:00", reviewEnd: "16-Mar-2026 12:30", impact: "Service Affecting", vendor: "ALCATEL", location: "GURGAON-GRG" },
-    { id: "CRQ000005983712", status: "Canceled", olmid: "B0945123", reviewStart: "16-Mar-2026 14:00", reviewEnd: "16-Mar-2026 14:30", impact: "Non Service Affecting", vendor: "ERICSSON", location: "KOLKATA-CCU" },
-    { id: "CRQ000005983713", status: "Approved", olmid: "B1056234", reviewStart: "16-Mar-2026 15:00", reviewEnd: "16-Mar-2026 15:30", impact: "Service Affecting", vendor: "CISCO", location: "AHMEDABAD-AMD" },
+    { id: "CRQ000005983710", status: "Approved", olmid: "B0723451", reviewStart: "16-Mar-2026 11:00", reviewEnd: "16-Mar-2026 11:45", impact: "Non Service Affecting", vendor: "NOKIA", ownership: "CCB", location: "GURGAON-GRG" },
+    { id: "CRQ000005983711", status: "Pending for Approval", olmid: "B0834512", reviewStart: "16-Mar-2026 12:00", reviewEnd: "16-Mar-2026 12:30", impact: "Service Affecting", vendor: "ALCATEL", ownership: "SE", location: "GURGAON-GRG" },
+    { id: "CRQ000005983712", status: "Rejected", olmid: "B0945123", reviewStart: "16-Mar-2026 14:00", reviewEnd: "16-Mar-2026 14:30", impact: "Non Service Affecting", vendor: "ERICSSON", ownership: "CCB", location: "KOLKATA-CCU" },
+    { id: "CRQ000005983713", status: "Approved", olmid: "B1056234", reviewStart: "16-Mar-2026 15:00", reviewEnd: "16-Mar-2026 15:30", impact: "Service Affecting", vendor: "CISCO", ownership: "SE", location: "AHMEDABAD-AMD" },
   ]},
   { id: "CEN/AC/CRD-A/MOB/16032026/002", type: "Card Addition", description: "Cross-connect provisioning", crqs: [
-    { id: "CRQ000005983801", status: "In Review", olmid: "A1D5PXR6", reviewStart: "16-Mar-2026 18:00", reviewEnd: "16-Mar-2026 18:45", impact: "Service Affecting", vendor: "NOKIA", location: "MUMBAI-BOM" },
+    { id: "CRQ000005983801", status: "Pending for Approval", olmid: "A1D5PXR6", reviewStart: "16-Mar-2026 18:00", reviewEnd: "16-Mar-2026 18:45", impact: "Service Affecting", vendor: "NOKIA", ownership: "CCB", location: "MUMBAI-BOM" },
   ]},
   { id: "CEN/AC/CRD-A/MOB/16032026/003", type: "Card Addition", description: "Backbone uplink upgrade", crqs: [
-    { id: "CRQ000005983902", status: "Approved", olmid: "B0095276", reviewStart: "16-Mar-2026 20:00", reviewEnd: "16-Mar-2026 20:30", impact: "Non Service Affecting", vendor: "CISCO", location: "DELHI-DEL" },
-    { id: "CRQ000005983903", status: "Pause", olmid: "B0096168", reviewStart: "16-Mar-2026 22:00", reviewEnd: "16-Mar-2026 22:30", impact: "Service Affecting", vendor: "NOKIA", location: "DELHI-DEL" },
+    { id: "CRQ000005983902", status: "Approved", olmid: "B0095276", reviewStart: "16-Mar-2026 20:00", reviewEnd: "16-Mar-2026 20:30", impact: "Non Service Affecting", vendor: "CISCO", ownership: "SE", location: "DELHI-DEL" },
+    { id: "CRQ000005983903", status: "Pending for Approval", olmid: "B0096168", reviewStart: "16-Mar-2026 22:00", reviewEnd: "16-Mar-2026 22:30", impact: "Service Affecting", vendor: "NOKIA", ownership: "CCB", location: "DELHI-DEL" },
   ]},
   { id: "CEN/AC/CRD-A/MOB/16042026/003", type: "Card Addition", description: "Edge router refresh", crqs: [
-    { id: "CRQ000005984010", status: "In Review", olmid: "B0277812", reviewStart: "16-Apr-2026 09:00", reviewEnd: "16-Apr-2026 09:30", impact: "Service Affecting", vendor: "ALCATEL", location: "BANGALORE-BLR" },
+    { id: "CRQ000005984010", status: "Pending for Approval", olmid: "B0277812", reviewStart: "16-Apr-2026 09:00", reviewEnd: "16-Apr-2026 09:30", impact: "Service Affecting", vendor: "ALCATEL", ownership: "SE", location: "BANGALORE-BLR" },
   ]},
   { id: "MPL/T5/TRIB1/MOB/01132025/002", type: "TR to IP - RING 10G", description: "TR migration to IP ring 10G", crqs: [
-    { id: "CRQ000005984120", status: "Approved", olmid: "B0318792", reviewStart: "13-Jan-2026 01:00", reviewEnd: "13-Jan-2026 01:30", impact: "Service Affecting", vendor: "NOKIA", location: "CHENNAI-MAA" },
-    { id: "CRQ000005984121", status: "Non Service Affecting", olmid: "B0316607", reviewStart: "13-Jan-2026 02:00", reviewEnd: "13-Jan-2026 02:30", impact: "Non Service Affecting", vendor: "ERICSSON", location: "CHENNAI-MAA" },
-    { id: "CRQ000005984122", status: "In Review", olmid: "B0421987", reviewStart: "13-Jan-2026 03:00", reviewEnd: "13-Jan-2026 03:30", impact: "Service Affecting", vendor: "CISCO", location: "CHENNAI-MAA" },
+    { id: "CRQ000005984120", status: "Approved", olmid: "B0318792", reviewStart: "13-Jan-2026 01:00", reviewEnd: "13-Jan-2026 01:30", impact: "Service Affecting", vendor: "NOKIA", ownership: "CCB", location: "CHENNAI-MAA" },
+    { id: "CRQ000005984121", status: "Approved", olmid: "B0316607", reviewStart: "13-Jan-2026 02:00", reviewEnd: "13-Jan-2026 02:30", impact: "Non Service Affecting", vendor: "ERICSSON", ownership: "SE", location: "CHENNAI-MAA" },
+    { id: "CRQ000005984122", status: "Pending for Approval", olmid: "B0421987", reviewStart: "13-Jan-2026 03:00", reviewEnd: "13-Jan-2026 03:30", impact: "Service Affecting", vendor: "CISCO", ownership: "CCB", location: "CHENNAI-MAA" },
   ]},
 ];
 
@@ -228,25 +233,24 @@ export const DEFAULT_WORKFLOW: WorkflowAssignment[] = wf([
 ]);
 
 export const STATUS_STYLES: Record<ReviewStatus, string> = {
-  Pause: "bg-slate-50 text-slate-600 border border-slate-200",
   Approved: "bg-green-50 text-green-700 border border-green-200",
-  Canceled: "bg-red-50 text-red-700 border border-red-200",
-  "In Review": "bg-blue-50 text-blue-700 border border-blue-200",
-  "Non Service Affecting": "bg-slate-100 text-slate-600 border border-slate-200",
+  "Pending for Approval": "bg-amber-50 text-amber-700 border border-amber-200",
+  Rejected: "bg-red-50 text-red-700 border border-red-200",
+};
+
+export const OWNERSHIP_STYLES: Record<CRQOwnership, string> = {
+  CCB: "bg-indigo-50 text-indigo-700 border border-indigo-200",
+  SE: "bg-teal-50 text-teal-700 border border-teal-200",
 };
 
 export function mopValidationStatus(status: ReviewStatus): string {
   switch (status) {
     case "Approved":
       return "completed";
-    case "In Review":
-      return "in progress";
-    case "Pause":
+    case "Pending for Approval":
       return "pending";
-    case "Canceled":
+    case "Rejected":
       return "failed";
-    case "Non Service Affecting":
-      return "completed";
   }
 }
 
@@ -254,14 +258,10 @@ export function taskClosureStatus(status: ReviewStatus): string {
   switch (status) {
     case "Approved":
       return "completed";
-    case "In Review":
-      return "in progress";
-    case "Pause":
+    case "Pending for Approval":
       return "pending";
-    case "Canceled":
+    case "Rejected":
       return "pending";
-    case "Non Service Affecting":
-      return "completed";
   }
 }
 

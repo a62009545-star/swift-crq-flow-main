@@ -49,6 +49,8 @@ import {
   Download,
   Zap,
   BarChart3,
+  Hand,
+  Tag,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -69,6 +71,16 @@ const STAGE_ID_TO_NAME: Record<string, string> = {
   closure: "Task Closure",
 };
 
+const STAGE_COLORS: Record<string, { bg: string; text: string; border: string; dot: string }> = {
+  plan:     { bg: "rgba(99,102,241,0.18)",  text: "#a5b4fc", border: "rgba(99,102,241,0.35)",  dot: "#818cf8" },
+  impact:   { bg: "rgba(234,179,8,0.15)",   text: "#fcd34d", border: "rgba(234,179,8,0.35)",   dot: "#fbbf24" },
+  mop:      { bg: "rgba(59,130,246,0.18)",  text: "#93c5fd", border: "rgba(59,130,246,0.35)",  dot: "#60a5fa" },
+  mopv:     { bg: "rgba(139,92,246,0.18)",  text: "#c4b5fd", border: "rgba(139,92,246,0.35)",  dot: "#a78bfa" },
+  schedule: { bg: "rgba(16,185,129,0.15)",  text: "#6ee7b7", border: "rgba(16,185,129,0.35)",  dot: "#34d399" },
+  exec:     { bg: "rgba(249,115,22,0.15)",  text: "#fdba74", border: "rgba(249,115,22,0.35)",  dot: "#fb923c" },
+  closure:  { bg: "rgba(34,197,94,0.15)",   text: "#86efac", border: "rgba(34,197,94,0.35)",   dot: "#4ade80" },
+};
+
 const MOP_CREATED_AT: Record<string, string> = {
   CRQ000005983527: "20-Feb-2026 01:30",
   CRQ000005983602: "10-Mar-2026 08:00",
@@ -86,26 +98,16 @@ const RESCHEDULE_REASONS = [
   "Other",
 ];
 
-// ─── Network Execution reschedule reasons (postpone-only) ───────────────────
+// ─── Network Execution reschedule reasons ────────────────────────────────────
 
 type ExecRescheduleReason = "Resource Unavailability" | "Partial Completion" | "Zero Completion";
 
 const EXEC_RESCHEDULE_REASONS: { id: ExecRescheduleReason; desc: string }[] = [
-  {
-    id: "Resource Unavailability",
-    desc: "Engineer, tool, or site access not available for the scheduled window.",
-  },
-  {
-    id: "Partial Completion",
-    desc: "Some tasks under this CRQ are done, the rest are still open.",
-  },
-  {
-    id: "Zero Completion",
-    desc: "No tasks under this CRQ have been completed yet.",
-  },
+  { id: "Resource Unavailability", desc: "Engineer, tool, or site access not available for the scheduled window." },
+  { id: "Partial Completion", desc: "Some tasks under this CRQ are done, the rest are still open." },
+  { id: "Zero Completion", desc: "No tasks under this CRQ have been completed yet." },
 ];
 
-// Reads the real task list for a CRQ and tells us what state execution is actually in.
 function getExecCompletionState(crqId: string): {
   completed: Task[];
   pending: Task[];
@@ -117,7 +119,7 @@ function getExecCompletionState(crqId: string): {
   return { completed, pending, total: tasks.length };
 }
 
-// ─── Per-stage reschedule rules (role-aware) ──────────────────────────────────
+// ─── Per-stage reschedule rules ───────────────────────────────────────────────
 
 type RoleRules = {
   impactedParties: string[];
@@ -158,12 +160,8 @@ const STAGE_RESCHEDULE_RULES: Record<string, RoleRules> = {
     ],
   },
   exec: {
-    impactedParties: [
-      "Not allowed — only NOC (Admin) can reschedule once execution is scheduled.",
-    ],
-    circleSPOC: [
-      "Not allowed — only NOC (Admin) can reschedule once execution is scheduled.",
-    ],
+    impactedParties: ["Not allowed — only NOC (Admin) can reschedule once execution is scheduled."],
+    circleSPOC: ["Not allowed — only NOC (Admin) can reschedule once execution is scheduled."],
     noc: [
       "Postpone only — prepone is not permitted at this stage.",
       "Resource Unavailability: standard postpone, no fixed time gate.",
@@ -174,12 +172,8 @@ const STAGE_RESCHEDULE_RULES: Record<string, RoleRules> = {
     ],
   },
   closure: {
-    impactedParties: [
-      "Not allowed — only NOC (Admin) can reschedule at this stage.",
-    ],
-    circleSPOC: [
-      "Not allowed — only NOC (Admin) can reschedule at this stage.",
-    ],
+    impactedParties: ["Not allowed — only NOC (Admin) can reschedule at this stage."],
+    circleSPOC: ["Not allowed — only NOC (Admin) can reschedule at this stage."],
     noc: [
       "Partial completion: new activity window must be selected within 48 hours.",
       "Completed and pending task details remain visible during the update.",
@@ -261,30 +255,18 @@ function RescheduleDisclaimer({ govKey }: { govKey: string }) {
   const footer = STAGE_RESCHEDULE_FOOTER[govKey];
   if (!rules) return null;
 
-  const roles: {
-    key: keyof RoleRules;
-    label: string;
-    restricted: boolean;
-  }[] = [
+  const roles: { key: keyof RoleRules; label: string; restricted: boolean }[] = [
     {
       key: "impactedParties",
       label: "Impacted parties",
-      restricted:
-        rules.impactedParties[0].startsWith("Not allowed") ||
-        rules.impactedParties[0].startsWith("Not applicable"),
+      restricted: rules.impactedParties[0].startsWith("Not allowed") || rules.impactedParties[0].startsWith("Not applicable"),
     },
     {
       key: "circleSPOC",
       label: "Circle SPOC",
-      restricted:
-        rules.circleSPOC[0].startsWith("Not allowed") ||
-        rules.circleSPOC[0].startsWith("Not applicable"),
+      restricted: rules.circleSPOC[0].startsWith("Not allowed") || rules.circleSPOC[0].startsWith("Not applicable"),
     },
-    {
-      key: "noc",
-      label: "NOC (admin)",
-      restricted: false,
-    },
+    { key: "noc", label: "NOC (admin)", restricted: false },
   ];
 
   return (
@@ -295,39 +277,16 @@ function RescheduleDisclaimer({ govKey }: { govKey: string }) {
       </div>
       <div className="grid grid-cols-3 divide-x divide-slate-100 bg-white">
         {roles.map((role) => (
-          <div
-            key={role.key}
-            className={cn("p-3", role.restricted ? "bg-red-50/40" : "bg-green-50/30")}
-          >
-            <div
-              className={cn(
-                "flex items-center gap-1.5 font-semibold text-[10px] uppercase tracking-widest mb-2",
-                role.restricted ? "text-red-700" : "text-green-700"
-              )}
-            >
-              <span
-                className={cn(
-                  "w-4 h-4 rounded flex items-center justify-center shrink-0",
-                  role.restricted ? "bg-red-100" : "bg-green-100"
-                )}
-              >
-                {role.restricted ? (
-                  <XCircle className="h-2.5 w-2.5 text-red-500" />
-                ) : (
-                  <CheckCircle2 className="h-2.5 w-2.5 text-green-500" />
-                )}
+          <div key={role.key} className={cn("p-3", role.restricted ? "bg-red-50/40" : "bg-green-50/30")}>
+            <div className={cn("flex items-center gap-1.5 font-semibold text-[10px] uppercase tracking-widest mb-2", role.restricted ? "text-red-700" : "text-green-700")}>
+              <span className={cn("w-4 h-4 rounded flex items-center justify-center shrink-0", role.restricted ? "bg-red-100" : "bg-green-100")}>
+                {role.restricted ? <XCircle className="h-2.5 w-2.5 text-red-500" /> : <CheckCircle2 className="h-2.5 w-2.5 text-green-500" />}
               </span>
               {role.label}
             </div>
             <ul className="space-y-1">
               {rules[role.key].map((rule, i) => (
-                <li
-                  key={i}
-                  className={cn(
-                    "flex gap-1.5 leading-relaxed",
-                    role.restricted ? "text-red-800" : "text-green-900"
-                  )}
-                >
+                <li key={i} className={cn("flex gap-1.5 leading-relaxed", role.restricted ? "text-red-800" : "text-green-900")}>
                   <span className="shrink-0 mt-0.5">•</span>
                   <span>{rule}</span>
                 </li>
@@ -499,7 +458,6 @@ function MopReschedulePanel({ crqId, reviewStart }: { crqId: string; reviewStart
   return (
     <div className="space-y-4">
       <RescheduleDisclaimer govKey="mop" />
-
       {hasMop ? (
         <div className="flex items-center gap-2 rounded-lg bg-green-50 border border-green-100 px-3 py-2">
           <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
@@ -512,11 +470,9 @@ function MopReschedulePanel({ crqId, reviewStart }: { crqId: string; reviewStart
           <span>MOP not yet created — direct postponement allowed.</span>
         </div>
       )}
-
       {confirmMsg && (
         <ConfirmBanner message={confirmMsg} onConfirm={() => { setConfirmMsg(null); setSubmitted(true); }} onCancel={() => setConfirmMsg(null)} />
       )}
-
       {hasMop && (
         <div>
           <div className="text-[10px] uppercase tracking-widest text-slate-700 font-bold mb-2">Reschedule Type <span className="text-red-500">*</span></div>
@@ -534,7 +490,6 @@ function MopReschedulePanel({ crqId, reviewStart }: { crqId: string; reviewStart
           </div>
         </div>
       )}
-
       {type && (
         <>
           <GovernanceBox rules={STAGE_GOVERNANCE[govKey] ?? []} />
@@ -576,6 +531,122 @@ function MopReschedulePanel({ crqId, reviewStart }: { crqId: string; reviewStart
   );
 }
 
+// ─── Partial Completion Task Selector ─────────────────────────────────────────
+
+function PartialTaskSelector({
+  crqId,
+  selectedIds,
+  onChange,
+}: {
+  crqId: string;
+  selectedIds: Set<string>;
+  onChange: (ids: Set<string>) => void;
+}) {
+  const { pending } = getExecCompletionState(crqId);
+
+  if (pending.length === 0) {
+    return (
+      <div className="text-[11px] text-slate-400 italic px-1">No pending tasks found for this CRQ.</div>
+    );
+  }
+
+  function toggle(id: string) {
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    onChange(next);
+  }
+
+  function toggleAll() {
+    if (selectedIds.size === pending.length) onChange(new Set());
+    else onChange(new Set(pending.map((t) => t.id)));
+  }
+
+  const allSelected = selectedIds.size === pending.length;
+
+  return (
+    <div className="rounded-lg border border-slate-200 overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between px-3 py-2 bg-slate-50 border-b border-slate-100">
+        <div className="flex items-center gap-2">
+          <Tag className="h-3.5 w-3.5 text-slate-400" />
+          <span className="text-[10px] uppercase tracking-widest font-bold text-slate-500">
+            Select Tasks to Reschedule Forward
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-semibold text-slate-600">
+            {selectedIds.size}/{pending.length} selected
+          </span>
+          <button
+            onClick={toggleAll}
+            className="text-[10px] font-semibold text-indigo-600 hover:text-indigo-700 transition px-2 py-0.5 rounded border border-indigo-200 bg-indigo-50 hover:bg-indigo-100"
+          >
+            {allSelected ? "Deselect All" : "Select All"}
+          </button>
+        </div>
+      </div>
+
+      {/* Task list */}
+      <div className="divide-y divide-slate-100 max-h-56 overflow-y-auto">
+        {pending.map((task) => {
+          const checked = selectedIds.has(task.id);
+          return (
+            <label
+              key={task.id}
+              className={cn(
+                "flex items-start gap-3 px-3 py-2.5 cursor-pointer transition-colors select-none",
+                checked ? "bg-indigo-50/60" : "bg-white hover:bg-slate-50"
+              )}
+            >
+              <input
+                type="checkbox"
+                checked={checked}
+                onChange={() => toggle(task.id)}
+                className="mt-0.5 accent-indigo-600 h-3.5 w-3.5 shrink-0"
+              />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={cn("font-mono text-[11px] font-semibold", checked ? "text-indigo-700" : "text-slate-700")}>
+                    {task.id}
+                  </span>
+                  <span className={cn(
+                    "text-[10px] px-1.5 py-0.5 rounded-full border font-medium",
+                    TASK_STATUS_STYLES[task.status]
+                  )}>
+                    {task.status}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 mt-0.5 flex-wrap">
+                  <span className="text-[10px] text-slate-500 font-mono truncate">{task.neLabel}</span>
+                  <span className="text-[10px] text-slate-400">{task.locationCode}</span>
+                </div>
+                <div className="flex gap-1 mt-1 flex-wrap">
+                  {task.profileTypes.map((p) => (
+                    <span key={p} className="text-[9px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">
+                      {p}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </label>
+          );
+        })}
+      </div>
+
+      {/* Summary footer */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-indigo-50 border-t border-indigo-100">
+          <CheckCircle2 className="h-3 w-3 text-indigo-500 shrink-0" />
+          <span className="text-[11px] text-indigo-800 font-medium">
+            {selectedIds.size} task{selectedIds.size !== 1 ? "s" : ""} will be carried forward to the rescheduled window.
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Network Execution Reschedule Panel ──────────────────────────────────────
 
 function ExecReschedulePanel({ crqId }: { crqId: string }) {
@@ -590,8 +661,9 @@ function ExecReschedulePanel({ crqId }: { crqId: string }) {
   const [confirmMsg, setConfirmMsg] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
+  // ── Task selection for Partial Completion ──
+  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
 
-  // Mismatch hint: if the user picks a completion-based reason that doesn't match real task data.
   const reasonMismatch =
     reason &&
     (reason === "Partial Completion" || reason === "Zero Completion") &&
@@ -600,14 +672,11 @@ function ExecReschedulePanel({ crqId }: { crqId: string }) {
 
   const thresholdHours = reason === "Partial Completion" ? 24 : reason === "Zero Completion" ? 48 : null;
 
-  function hoursFromNow(d: Date) {
-    return hoursBetween(new Date(), d);
-  }
+  function hoursFromNow(d: Date) { return hoursBetween(new Date(), d); }
 
   function needsDomainHeadApproval(): boolean {
     if (!thresholdHours || !startDT) return false;
-    const newStart = new Date(startDT);
-    return hoursFromNow(newStart) > thresholdHours;
+    return hoursFromNow(new Date(startDT)) > thresholdHours;
   }
 
   function validate() {
@@ -616,9 +685,8 @@ function ExecReschedulePanel({ crqId }: { crqId: string }) {
     if (!startDT) e.startDT = "Required.";
     if (!endDT) e.endDT = "Required.";
     if (startDT && endDT && new Date(endDT) <= new Date(startDT)) e.endDT = "End must be after start.";
-    if (needsDomainHeadApproval() && !domainHeadApproval) {
-      e.domainHeadApproval = "Domain Head approval is required for this delay.";
-    }
+    if (needsDomainHeadApproval() && !domainHeadApproval) e.domainHeadApproval = "Domain Head approval is required for this delay.";
+    if (reason === "Partial Completion" && selectedTaskIds.size === 0) e.tasks = "Please select at least one task to reschedule forward.";
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -626,9 +694,7 @@ function ExecReschedulePanel({ crqId }: { crqId: string }) {
   function handleSubmit() {
     if (!validate()) return;
     if (reason === "Zero Completion") {
-      setConfirmMsg(
-        "This reschedule will retrigger the MOP Validation stage, since no tasks have been completed yet. Requestor and Impacted Parties will be notified of the new schedule. Do you want to continue?"
-      );
+      setConfirmMsg("This reschedule will retrigger the MOP Validation stage, since no tasks have been completed yet. Requestor and Impacted Parties will be notified of the new schedule. Do you want to continue?");
       return;
     }
     setSubmitted(true);
@@ -641,6 +707,23 @@ function ExecReschedulePanel({ crqId }: { crqId: string }) {
           <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
           <span className="text-sm text-green-800 font-medium">Reschedule submitted successfully.</span>
         </div>
+        {reason === "Partial Completion" && selectedTaskIds.size > 0 && (
+          <div className="rounded-lg border border-indigo-100 bg-indigo-50 px-4 py-3">
+            <div className="flex items-center gap-2 mb-2">
+              <Tag className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
+              <span className="text-[11px] font-semibold text-indigo-800">
+                {selectedTaskIds.size} task{selectedTaskIds.size !== 1 ? "s" : ""} carried forward to new window
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {[...selectedTaskIds].map((id) => (
+                <span key={id} className="font-mono text-[10px] px-2 py-0.5 rounded-md bg-white border border-indigo-200 text-indigo-700">
+                  {id}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="flex items-center gap-2 rounded-lg bg-blue-50 border border-blue-100 px-4 py-2.5">
           <ShieldAlert className="h-3.5 w-3.5 text-blue-500 shrink-0" />
           <span className="text-[11px] text-blue-800">Requestor and Impacted Parties have been notified of the updated schedule.</span>
@@ -678,7 +761,12 @@ function ExecReschedulePanel({ crqId }: { crqId: string }) {
             return (
               <button
                 key={r.id}
-                onClick={() => { setReason(r.id); setDomainHeadApproval(false); setErrors({}); }}
+                onClick={() => {
+                  setReason(r.id);
+                  setDomainHeadApproval(false);
+                  setErrors({});
+                  if (r.id !== "Partial Completion") setSelectedTaskIds(new Set());
+                }}
                 className={cn(
                   "w-full text-left flex items-start gap-3 px-4 py-2.5 rounded-lg border-2 transition select-none",
                   active ? "border-red-300 bg-red-50" : "border-slate-200 hover:bg-slate-50"
@@ -696,9 +784,22 @@ function ExecReschedulePanel({ crqId }: { crqId: string }) {
         {errors.reason && <p className="text-[10px] text-red-500 mt-1">{errors.reason}</p>}
       </div>
 
-      {/* Task snapshot — shown for either completion-based reason */}
-      {(reason === "Partial Completion" || reason === "Zero Completion") && (
+      {/* ── Task snapshot (Zero Completion) ── */}
+      {reason === "Zero Completion" && (
         <ExecTaskCompletionTable crqId={crqId} />
+      )}
+
+      {/* ── Task selector (Partial Completion) ── */}
+      {reason === "Partial Completion" && (
+        <div className="space-y-1.5">
+          <ExecTaskCompletionTable crqId={crqId} />
+          <PartialTaskSelector
+            crqId={crqId}
+            selectedIds={selectedTaskIds}
+            onChange={setSelectedTaskIds}
+          />
+          {errors.tasks && <p className="text-[10px] text-red-500">{errors.tasks}</p>}
+        </div>
       )}
 
       {reasonMismatch && (
@@ -713,20 +814,19 @@ function ExecReschedulePanel({ crqId }: { crqId: string }) {
 
       {reason && (
         <>
-          {/* Threshold-aware governance note */}
           <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
             <div className="flex items-center gap-2 text-blue-700 font-semibold text-xs mb-2">
               <ShieldAlert className="h-3.5 w-3.5" /> Postponement Window
             </div>
             <ul className="space-y-1 text-[11px] text-blue-800">
               {reason === "Resource Unavailability" && (
-                <li className="flex gap-1.5"><span>•</span><span>No fixed time gate for this reason — standard postpone applies. Requestor and Impacted Parties will still be notified.</span></li>
+                <li className="flex gap-1.5"><span>•</span><span>No fixed time gate — standard postpone applies. Requestor and Impacted Parties will still be notified.</span></li>
               )}
               {reason === "Partial Completion" && (
                 <>
                   <li className="flex gap-1.5"><span>•</span><span>Postpone allowed within <strong>24 hours</strong> of now without extra approval.</span></li>
                   <li className="flex gap-1.5"><span>•</span><span>Beyond 24 hours, <strong>Domain Head approval</strong> is required before submitting.</span></li>
-                  <li className="flex gap-1.5"><span>•</span><span>Completed and pending tasks remain visible throughout.</span></li>
+                  <li className="flex gap-1.5"><span>•</span><span>Only the tasks you select above will be carried forward to the new window.</span></li>
                 </>
               )}
               {reason === "Zero Completion" && (
@@ -739,34 +839,24 @@ function ExecReschedulePanel({ crqId }: { crqId: string }) {
             </ul>
           </div>
 
-          {/* Date/time range */}
           <div>
             <div className="text-[10px] uppercase tracking-widest text-slate-700 font-bold mb-2">New Proposed Date & Time Range</div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-[11px] text-slate-700 font-semibold mb-1 block">Start Date & Time <span className="text-red-500">*</span></label>
-                <input
-                  type="datetime-local"
-                  value={startDT}
-                  onChange={(e) => setStartDT(e.target.value)}
-                  className={cn("w-full text-sm border rounded-lg px-3 py-2 text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-red-300", errors.startDT ? "border-red-400" : "border-slate-200")}
-                />
+                <input type="datetime-local" value={startDT} onChange={(e) => setStartDT(e.target.value)}
+                  className={cn("w-full text-sm border rounded-lg px-3 py-2 text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-red-300", errors.startDT ? "border-red-400" : "border-slate-200")} />
                 {errors.startDT && <p className="text-[10px] text-red-500 mt-0.5">{errors.startDT}</p>}
               </div>
               <div>
                 <label className="text-[11px] text-slate-700 font-semibold mb-1 block">End Date & Time <span className="text-red-500">*</span></label>
-                <input
-                  type="datetime-local"
-                  value={endDT}
-                  onChange={(e) => setEndDT(e.target.value)}
-                  className={cn("w-full text-sm border rounded-lg px-3 py-2 text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-red-300", errors.endDT ? "border-red-400" : "border-slate-200")}
-                />
+                <input type="datetime-local" value={endDT} onChange={(e) => setEndDT(e.target.value)}
+                  className={cn("w-full text-sm border rounded-lg px-3 py-2 text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-red-300", errors.endDT ? "border-red-400" : "border-slate-200")} />
                 {errors.endDT && <p className="text-[10px] text-red-500 mt-0.5">{errors.endDT}</p>}
               </div>
             </div>
           </div>
 
-          {/* Domain Head approval gate — only appears once threshold is exceeded */}
           {needsDomainHeadApproval() && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2">
               <div className="flex items-start gap-2">
@@ -776,19 +866,13 @@ function ExecReschedulePanel({ crqId }: { crqId: string }) {
                 </span>
               </div>
               <label className="flex items-center gap-2 text-[11px] text-amber-900 font-medium cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={domainHeadApproval}
-                  onChange={(e) => setDomainHeadApproval(e.target.checked)}
-                  className="accent-amber-600 h-3.5 w-3.5"
-                />
+                <input type="checkbox" checked={domainHeadApproval} onChange={(e) => setDomainHeadApproval(e.target.checked)} className="accent-amber-600 h-3.5 w-3.5" />
                 Domain Head has approved this extension
               </label>
               {errors.domainHeadApproval && <p className="text-[10px] text-red-500">{errors.domainHeadApproval}</p>}
             </div>
           )}
 
-          {/* Notification footer — always shown once a reason is picked */}
           <div className="flex items-start gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2.5">
             <ShieldAlert className="h-3.5 w-3.5 text-slate-400 mt-0.5 shrink-0" />
             <span className="text-[11px] text-slate-600 leading-relaxed">
@@ -796,10 +880,7 @@ function ExecReschedulePanel({ crqId }: { crqId: string }) {
             </span>
           </div>
 
-          <button
-            onClick={handleSubmit}
-            className="w-full py-2.5 text-sm font-semibold bg-red-600 text-white rounded-lg hover:bg-red-700 transition shadow-sm"
-          >
+          <button onClick={handleSubmit} className="w-full py-2.5 text-sm font-semibold bg-red-600 text-white rounded-lg hover:bg-red-700 transition shadow-sm">
             Submit Reschedule
           </button>
         </>
@@ -816,9 +897,7 @@ function RescheduleAccordion({ label = "Reschedule", children }: { label?: strin
     <div className="rounded-xl border border-red-100 overflow-hidden">
       <button onClick={() => setOpen((o) => !o)}
         className={cn("w-full flex items-center justify-between px-4 py-3 text-sm font-medium transition", open ? "bg-red-50 text-red-700" : "bg-white text-red-600 hover:bg-red-50/60")}>
-        <span className="flex items-center gap-2">
-          <Calendar className="h-4 w-4" />{label}
-        </span>
+        <span className="flex items-center gap-2"><Calendar className="h-4 w-4" />{label}</span>
         <ChevronDown className={cn("h-4 w-4 transition-transform text-red-400", open && "rotate-180")} />
       </button>
       {open && <div className="border-t border-red-100 bg-slate-50/60 px-4 py-4">{children}</div>}
@@ -872,28 +951,18 @@ function TaskStatusBadge({ completed, total }: { completed: number; total: numbe
   return (
     <span className={cn(
       "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border",
-      allDone
-        ? "bg-green-50 text-green-700 border-green-200"
-        : none
-        ? "bg-slate-100 text-slate-500 border-slate-200"
-        : "bg-amber-50 text-amber-700 border-amber-200"
+      allDone ? "bg-green-50 text-green-700 border-green-200" : none ? "bg-slate-100 text-slate-500 border-slate-200" : "bg-amber-50 text-amber-700 border-amber-200"
     )}>
-      {allDone
-        ? <CheckCircle2 className="h-3 w-3" />
-        : none
-        ? <Circle className="h-3 w-3" />
-        : <Clock className="h-3 w-3" />
-      }
+      {allDone ? <CheckCircle2 className="h-3 w-3" /> : none ? <Circle className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
       {completed}/{total} tasks
     </span>
   );
 }
 
-// ─── Completed / Pending Task Table (for exec reschedule) ───────────────────
+// ─── Exec Task Completion Table ───────────────────────────────────────────────
 
 function ExecTaskCompletionTable({ crqId }: { crqId: string }) {
   const { completed, pending, total } = getExecCompletionState(crqId);
-
   return (
     <div className="rounded-lg border border-slate-200 overflow-hidden">
       <div className="flex items-center justify-between px-3 py-2 bg-slate-50 border-b border-slate-100">
@@ -905,9 +974,7 @@ function ExecTaskCompletionTable({ crqId }: { crqId: string }) {
           <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest font-bold text-green-700 mb-2">
             <CheckCircle2 className="h-3 w-3" /> Completed ({completed.length})
           </div>
-          {completed.length === 0 ? (
-            <p className="text-[11px] text-slate-400">None yet.</p>
-          ) : (
+          {completed.length === 0 ? <p className="text-[11px] text-slate-400">None yet.</p> : (
             <ul className="space-y-1">
               {completed.map((t) => (
                 <li key={t.id} className="flex items-center justify-between text-[11px]">
@@ -922,9 +989,7 @@ function ExecTaskCompletionTable({ crqId }: { crqId: string }) {
           <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest font-bold text-amber-700 mb-2">
             <Clock className="h-3 w-3" /> Pending ({pending.length})
           </div>
-          {pending.length === 0 ? (
-            <p className="text-[11px] text-slate-400">None — all tasks complete.</p>
-          ) : (
+          {pending.length === 0 ? <p className="text-[11px] text-slate-400">None — all tasks complete.</p> : (
             <ul className="space-y-1">
               {pending.map((t) => (
                 <li key={t.id} className="flex items-center justify-between text-[11px]">
@@ -944,9 +1009,7 @@ function ExecTaskCompletionTable({ crqId }: { crqId: string }) {
 
 function TasksModal({ tasks, crqId, onClose }: { tasks: Task[]; crqId: string; onClose: () => void }) {
   const [search, setSearch] = useState("");
-  const filtered = tasks.filter((t) =>
-    t.id.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = tasks.filter((t) => t.id.toLowerCase().includes(search.toLowerCase()));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -984,46 +1047,42 @@ function TasksModal({ tasks, crqId, onClose }: { tasks: Task[]; crqId: string; o
           {filtered.length === 0 ? (
             <div className="py-10 text-center">
               <Search className="h-8 w-8 text-slate-200 mx-auto mb-3" />
-              <p className="text-sm text-slate-600 font-semibold">No tasks match <span className="font-mono text-slate-600">"{search}"</span></p>
+              <p className="text-sm text-slate-600 font-semibold">No tasks match <span className="font-mono">"{search}"</span></p>
             </div>
-          ) : (
-            filtered.map((task) => (
-              <div key={task.id} className="rounded-xl border border-slate-200 bg-white hover:border-indigo-200 hover:shadow-sm transition-all duration-150 overflow-hidden">
-                <div className="flex items-center justify-between px-5 py-3 bg-slate-50 border-b border-slate-100">
-                  <span className="font-mono text-xs text-indigo-600 font-semibold">{task.id}</span>
-                  <span className={cn("text-[10px] px-2.5 py-0.5 rounded-full font-semibold border", TASK_STATUS_STYLES[task.status])}>
-                    {task.status}
-                  </span>
+          ) : filtered.map((task) => (
+            <div key={task.id} className="rounded-xl border border-slate-200 bg-white hover:border-indigo-200 hover:shadow-sm transition-all duration-150 overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-3 bg-slate-50 border-b border-slate-100">
+                <span className="font-mono text-xs text-indigo-600 font-semibold">{task.id}</span>
+                <span className={cn("text-[10px] px-2.5 py-0.5 rounded-full font-semibold border", TASK_STATUS_STYLES[task.status])}>{task.status}</span>
+              </div>
+              <div className="px-5 py-4 grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-3">
+                <div>
+                  <div className="text-[9px] uppercase tracking-widest text-slate-700 font-bold mb-0.5">NE Label</div>
+                  <div className="font-mono text-xs text-slate-700 font-medium">{task.neLabel}</div>
                 </div>
-                <div className="px-5 py-4 grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-3">
-                  <div>
-                    <div className="text-[9px] uppercase tracking-widest text-slate-700 font-bold mb-0.5">NE Label</div>
-                    <div className="font-mono text-xs text-slate-700 font-medium">{task.neLabel}</div>
+                <div>
+                  <div className="text-[9px] uppercase tracking-widest text-slate-400 font-semibold mb-0.5">Location Code</div>
+                  <div className="text-xs text-slate-600">{task.locationCode}</div>
+                </div>
+                <div>
+                  <div className="text-[9px] uppercase tracking-widest text-slate-400 font-semibold mb-0.5">Profile Types</div>
+                  <div className="flex flex-wrap gap-1 mt-0.5">
+                    {task.profileTypes.map((p) => (
+                      <span key={p} className="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200 font-medium">{p}</span>
+                    ))}
                   </div>
-                  <div>
-                    <div className="text-[9px] uppercase tracking-widest text-slate-400 font-semibold mb-0.5">Location Code</div>
-                    <div className="text-xs text-slate-600">{task.locationCode}</div>
-                  </div>
-                  <div>
-                    <div className="text-[9px] uppercase tracking-widest text-slate-400 font-semibold mb-0.5">Profile Types</div>
-                    <div className="flex flex-wrap gap-1 mt-0.5">
-                      {task.profileTypes.map((p) => (
-                        <span key={p} className="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200 font-medium">{p}</span>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-[9px] uppercase tracking-widest text-slate-400 font-semibold mb-0.5">Plan Activity</div>
-                    <div className="text-xs text-slate-700 leading-snug">{task.planActivity}</div>
-                  </div>
-                  <div className="md:col-span-2">
-                    <div className="text-[9px] uppercase tracking-widest text-slate-400 font-semibold mb-0.5">Task Activity</div>
-                    <div className="text-xs text-slate-700">{task.taskActivity}</div>
-                  </div>
+                </div>
+                <div>
+                  <div className="text-[9px] uppercase tracking-widest text-slate-400 font-semibold mb-0.5">Plan Activity</div>
+                  <div className="text-xs text-slate-700 leading-snug">{task.planActivity}</div>
+                </div>
+                <div className="md:col-span-2">
+                  <div className="text-[9px] uppercase tracking-widest text-slate-400 font-semibold mb-0.5">Task Activity</div>
+                  <div className="text-xs text-slate-700">{task.taskActivity}</div>
                 </div>
               </div>
-            ))
-          )}
+            </div>
+          ))}
         </div>
       </div>
     </div>
@@ -1056,75 +1115,27 @@ function ExecutionToast({ onDone }: { onDone: () => void }) {
 
 // ─── Validation Toast ─────────────────────────────────────────────────────────
 
-function ValidationToast({
-  pick,
-  stageName,
-  onDone,
-}: {
-  pick: "PASS" | "FAILED" | "CANCELLED";
-  stageName: string;
-  onDone: () => void;
-}) {
+function ValidationToast({ pick, stageName, onDone }: { pick: "PASS" | "FAILED" | "CANCELLED"; stageName: string; onDone: () => void }) {
   const [visible, setVisible] = useState(true);
-
   useEffect(() => {
-    const t = setTimeout(() => {
-      setVisible(false);
-      setTimeout(onDone, 300);
-    }, 3500);
+    const t = setTimeout(() => { setVisible(false); setTimeout(onDone, 300); }, 3500);
     return () => clearTimeout(t);
   }, [onDone]);
 
   const config = {
-    PASS: {
-      bg: "bg-white",
-      border: "border-green-200",
-      iconBg: "bg-green-50",
-      icon: <CheckCircle2 className="h-4 w-4 text-green-600" />,
-      title: "Validation Passed",
-      sub: stageName,
-      bar: "bg-green-500",
-    },
-    FAILED: {
-      bg: "bg-white",
-      border: "border-red-200",
-      iconBg: "bg-red-50",
-      icon: <XCircle className="h-4 w-4 text-red-500" />,
-      title: "Validation Failed",
-      sub: stageName,
-      bar: "bg-red-500",
-    },
-    CANCELLED: {
-      bg: "bg-white",
-      border: "border-slate-200",
-      iconBg: "bg-slate-100",
-      icon: <Ban className="h-4 w-4 text-slate-500" />,
-      title: "Validation Cancelled",
-      sub: stageName,
-      bar: "bg-slate-400",
-    },
+    PASS: { bg: "bg-white", border: "border-green-200", iconBg: "bg-green-50", icon: <CheckCircle2 className="h-4 w-4 text-green-600" />, title: "Validation Passed", bar: "bg-green-500" },
+    FAILED: { bg: "bg-white", border: "border-red-200", iconBg: "bg-red-50", icon: <XCircle className="h-4 w-4 text-red-500" />, title: "Validation Failed", bar: "bg-red-500" },
+    CANCELLED: { bg: "bg-white", border: "border-slate-200", iconBg: "bg-slate-100", icon: <Ban className="h-4 w-4 text-slate-500" />, title: "Validation Cancelled", bar: "bg-slate-400" },
   }[pick];
 
   return (
-    <div
-      className={cn(
-        "fixed top-5 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-5 py-3 rounded-xl shadow-lg border transition-all duration-300 overflow-hidden",
-        config.bg,
-        config.border,
-        visible ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-2"
-      )}
-    >
-      <div className={cn("w-7 h-7 rounded-full flex items-center justify-center shrink-0", config.iconBg)}>
-        {config.icon}
-      </div>
+    <div className={cn("fixed top-5 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-5 py-3 rounded-xl shadow-lg border transition-all duration-300 overflow-hidden", config.bg, config.border, visible ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-2")}>
+      <div className={cn("w-7 h-7 rounded-full flex items-center justify-center shrink-0", config.iconBg)}>{config.icon}</div>
       <div>
         <p className="text-sm font-semibold text-slate-800 leading-tight">{config.title}</p>
-        <p className="text-[11px] text-slate-400 mt-0.5">{config.sub}</p>
+        <p className="text-[11px] text-slate-400 mt-0.5">{stageName}</p>
       </div>
-      <div
-        className={cn("absolute bottom-0 left-0 h-0.5 rounded-full", config.bar)}
-        style={{ width: "100%", animation: "shrink 3.5s linear forwards" }}
-      />
+      <div className={cn("absolute bottom-0 left-0 h-0.5 rounded-full", config.bar)} style={{ width: "100%", animation: "shrink 3.5s linear forwards" }} />
       <style>{`@keyframes shrink { from { width: 100% } to { width: 0% } }`}</style>
     </div>
   );
@@ -1132,79 +1143,60 @@ function ValidationToast({
 
 // ─── Network Execution Panel ──────────────────────────────────────────────────
 
-type ExecTool = "infrasol" | "grasp";
-type ExecState = "idle" | "running" | "paused" | "finished";
+type ExecTool = "infrasol" | "grasp" | "manual";
+type ExecState = "idle" | "running" | "Paused" | "finished";
 type ComparisonResult = "Pass" | "Fail" | null;
+type ManualStage = "precheck" | "execution" | "postcheck" | "comparison";
+type ManualPick = "PASS" | "FAILED" | "CANCELLED";
+
+function toolLabel(tool: ExecTool) {
+  return tool === "infrasol" ? "InfraSol" : tool === "grasp" ? "GRASP" : "Manual";
+}
+
+const MANUAL_STAGE_LABEL: Record<ManualStage, string> = {
+  precheck: "Pre-Check",
+  execution: "Execution",
+  postcheck: "Post-Check",
+  comparison: "Comparison",
+};
 
 function ReportActions({ label, filename }: { label: string; filename: string }) {
   return (
     <div className="flex items-center gap-1.5">
-      <button
-        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:border-indigo-300 hover:text-indigo-600 transition shadow-sm"
-        title={`Preview ${label}`}
-      >
-        <FileText className="h-3 w-3" />
-        Preview
+      <button className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:border-indigo-300 hover:text-indigo-600 transition shadow-sm">
+        <FileText className="h-3 w-3" /> Preview
       </button>
-      <button
-        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold rounded-md border border-indigo-200 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition shadow-sm"
-        title={`Download ${filename}`}
-      >
-        <Download className="h-3 w-3" />
-        Download
+      <button className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold rounded-md border border-indigo-200 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition shadow-sm">
+        <Download className="h-3 w-3" /> Download
       </button>
     </div>
   );
 }
 
-function ExecToolPickerModal({
-  onSelect,
-  onCancel,
-}: {
-  onSelect: (tool: ExecTool) => void;
-  onCancel: () => void;
-}) {
+function ExecToolPickerModal({ onSelect, onCancel }: { onSelect: (tool: ExecTool) => void; onCancel: () => void }) {
   const tools: { id: ExecTool; label: string; desc: string; icon: React.ElementType }[] = [
-    {
-      id: "infrasol",
-      label: "InfraSol",
-      desc: "Automated infrastructure orchestration & push-based execution",
-      icon: Zap,
-    },
-    {
-      id: "grasp",
-      label: "GRASP",
-      desc: "Guided real-time activity and script push framework",
-      icon: Activity,
-    },
+    { id: "infrasol", label: "InfraSol", desc: "Automated infrastructure orchestration & push-based execution", icon: Zap },
+    { id: "grasp", label: "GRASP", desc: "Guided real-time activity and script push framework", icon: Activity },
+    { id: "manual", label: "Manual", desc: "Manually validate each step (Pre-Check, Execution, Post-Check, Comparison) with a Pass / Fail / Cancel review at every stage", icon: Hand },
   ];
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onCancel} />
       <div className="relative bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md mx-4 p-6 space-y-4">
         <div>
-          <h3 className="text-sm font-semibold text-slate-900">Select Execution Tool</h3>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Choose the tool to run the network activity against this CRQ.
-          </p>
+          <h3 className="text-sm font-semibold text-slate-900">Select Execution Approach</h3>
+          <p className="text-xs text-slate-500 mt-0.5">Choose how Pre-Check, Execution, Post-Check and Comparison will be carried out for this CRQ.</p>
         </div>
         <div className="space-y-3">
           {tools.map((t) => {
             const Icon = t.icon;
             return (
-              <button
-                key={t.id}
-                onClick={() => onSelect(t.id)}
-                className="w-full flex items-start gap-4 px-4 py-3.5 rounded-xl border-2 border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/40 transition text-left group"
-              >
+              <button key={t.id} onClick={() => onSelect(t.id)} className="w-full flex items-start gap-4 px-4 py-3.5 rounded-xl border-2 border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/40 transition text-left group">
                 <div className="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0 group-hover:bg-indigo-100 transition">
                   <Icon className="h-4 w-4 text-indigo-600" />
                 </div>
                 <div>
-                  <div className="text-sm font-semibold text-slate-800 group-hover:text-indigo-700 transition">
-                    {t.label}
-                  </div>
+                  <div className="text-sm font-semibold text-slate-800 group-hover:text-indigo-700 transition">{t.label}</div>
                   <div className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">{t.desc}</div>
                 </div>
                 <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-indigo-400 transition shrink-0 ml-auto self-center" />
@@ -1212,70 +1204,115 @@ function ExecToolPickerModal({
             );
           })}
         </div>
-        <button
-          onClick={onCancel}
-          className="w-full py-2 text-xs font-semibold text-slate-500 hover:text-slate-700 transition"
-        >
-          Cancel
-        </button>
+        <button onClick={onCancel} className="w-full py-2 text-xs font-semibold text-slate-500 hover:text-slate-700 transition">Cancel</button>
       </div>
     </div>
   );
 }
 
-function ExecStartToast({ tool, onDone }: { tool: ExecTool; onDone: () => void }) {
+function ManualValidationModal({ stage, onSelect, onCancel }: { stage: ManualStage; onSelect: (pick: ManualPick) => void; onCancel: () => void }) {
+  const options: { id: ManualPick; label: string; icon: React.ElementType; color: string; border: string; bg: string }[] = [
+    { id: "PASS", label: "PASS", icon: CheckCircle2, color: "text-green-600", border: "hover:border-green-300", bg: "hover:bg-green-50" },
+    { id: "FAILED", label: "FAILED", icon: XCircle, color: "text-red-600", border: "hover:border-red-300", bg: "hover:bg-red-50" },
+    { id: "CANCELLED", label: "CANCELLED", icon: Ban, color: "text-slate-500", border: "hover:border-slate-300", bg: "hover:bg-slate-100" },
+  ];
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onCancel} />
+      <div className="relative bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md mx-4 p-6 space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0">
+            <Hand className="h-4 w-4 text-indigo-600" />
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900">Manual Validation — {MANUAL_STAGE_LABEL[stage]}</h3>
+            <p className="text-[11px] text-slate-500 mt-0.5">Select the outcome for this step.</p>
+          </div>
+        </div>
+        <div className="space-y-2.5">
+          {options.map((opt) => {
+            const Icon = opt.icon;
+            return (
+              <button key={opt.id} onClick={() => onSelect(opt.id)} className={cn("w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 border-slate-200 transition-all duration-150 text-left", opt.border, opt.bg)}>
+                <Icon className={cn("h-5 w-5 shrink-0", opt.color)} />
+                <span className="text-sm font-semibold text-slate-800">{opt.label}</span>
+              </button>
+            );
+          })}
+        </div>
+        <button onClick={onCancel} className="w-full py-2 text-xs font-semibold text-slate-500 hover:text-slate-700 transition">Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+function ExecStartToast({ tool, label = "Execution Started Successfully", onDone }: { tool: ExecTool; label?: string; onDone: () => void }) {
   const [visible, setVisible] = useState(true);
   useEffect(() => {
     const t = setTimeout(() => { setVisible(false); setTimeout(onDone, 300); }, 2500);
     return () => clearTimeout(t);
   }, [onDone]);
-
   return (
-    <div
-      className={cn(
-        "fixed top-5 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-3 px-5 py-3 rounded-xl shadow-lg border border-indigo-100 bg-white transition-all duration-300 overflow-hidden",
-        visible ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-2"
-      )}
-    >
+    <div className={cn("fixed top-5 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-3 px-5 py-3 rounded-xl shadow-lg border border-indigo-100 bg-white transition-all duration-300 overflow-hidden", visible ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-2")}>
       <div className="w-7 h-7 rounded-full bg-indigo-50 flex items-center justify-center shrink-0">
         <Play className="h-3.5 w-3.5 text-indigo-600 fill-indigo-600" />
       </div>
       <div>
-        <p className="text-sm font-semibold text-slate-800 leading-tight">Execution Started Successfully</p>
-        <p className="text-[11px] text-slate-400 mt-0.5 capitalize">
-          Tool: {tool === "infrasol" ? "InfraSol" : "GRASP"}
-        </p>
+        <p className="text-sm font-semibold text-slate-800 leading-tight">{label}</p>
+        <p className="text-[11px] text-slate-400 mt-0.5">Tool: {toolLabel(tool)}</p>
       </div>
-      <div
-        className="absolute bottom-0 left-0 h-0.5 bg-indigo-500 rounded-full"
-        style={{ width: "100%", animation: "shrink 2.5s linear forwards" }}
-      />
+      <div className="absolute bottom-0 left-0 h-0.5 bg-indigo-500 rounded-full" style={{ width: "100%", animation: "shrink 2.5s linear forwards" }} />
       <style>{`@keyframes shrink { from { width: 100% } to { width: 0% } }`}</style>
     </div>
   );
 }
 
+function ManualPickBadge({ pick }: { pick: ManualPick | null }) {
+  if (!pick || pick === "PASS") return null;
+  return (
+    <span className={cn("inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border", pick === "FAILED" ? "bg-red-100 text-red-700 border-red-200" : "bg-slate-100 text-slate-600 border-slate-200")}>
+      {pick === "FAILED" ? <XCircle className="h-3 w-3" /> : <Ban className="h-3 w-3" />} {pick}
+    </span>
+  );
+}
+
 function NetworkExecutionPanel({ crqId }: { crqId: string }) {
-  const [execState, setExecState] = useState<ExecState>("idle");
   const [selectedTool, setSelectedTool] = useState<ExecTool | null>(null);
   const [showToolPicker, setShowToolPicker] = useState(false);
+  const [manualStage, setManualStage] = useState<ManualStage | null>(null);
+  const [validationToast, setValidationToast] = useState<{ pick: ManualPick; stageName: string } | null>(null);
+  const [precheckPick, setPrecheckPick] = useState<ManualPick | null>(null);
+  const [executionPick, setExecutionPick] = useState<ManualPick | null>(null);
+  const [postcheckPick, setPostcheckPick] = useState<ManualPick | null>(null);
+  const [comparisonPick, setComparisonPick] = useState<ManualPick | null>(null);
+  const [execState, setExecState] = useState<ExecState>("idle");
+  const [showToolToast, setShowToolToast] = useState(false);
   const [showExecToast, setShowExecToast] = useState(false);
+  const [preCheckDone, setPreCheckDone] = useState(false);
   const [postCheckDone, setPostCheckDone] = useState(false);
   const [comparison, setComparison] = useState<ComparisonResult>(null);
 
-  // Pre-check is "Yes" from CRQ data
-  const preCheckDone = true;
-  const executionFinished = execState === "finished";
-  const isRunning = execState === "running";
-  const isPaused = execState === "paused";
-
+  const isManual = selectedTool === "manual";
+  const isAutomated = !!selectedTool && !isManual;
+  const executionFinished = isManual ? executionPick === "PASS" : execState === "finished";
+  const isRunning = isAutomated && execState === "running";
+  const isPaused = isAutomated && execState === "Paused";
   const allComplete = preCheckDone && executionFinished && postCheckDone && comparison === "Pass";
 
   function handleToolSelect(tool: ExecTool) {
     setSelectedTool(tool);
     setShowToolPicker(false);
-    setExecState("running");
-    setShowExecToast(true);
+    if (tool === "manual") { setManualStage("precheck"); }
+    else { setPreCheckDone(true); setPrecheckPick("PASS"); setShowToolToast(true); }
+  }
+
+  function handleManualSubmit(stage: ManualStage, pick: ManualPick) {
+    setManualStage(null);
+    setValidationToast({ pick, stageName: MANUAL_STAGE_LABEL[stage] });
+    if (stage === "precheck") { setPrecheckPick(pick); if (pick === "PASS") setPreCheckDone(true); }
+    else if (stage === "execution") { setExecutionPick(pick); }
+    else if (stage === "postcheck") { setPostcheckPick(pick); if (pick === "PASS") setPostCheckDone(true); }
+    else if (stage === "comparison") { setComparisonPick(pick); if (pick === "PASS") setComparison("Pass"); else if (pick === "FAILED") setComparison("Fail"); }
   }
 
   const steps = [
@@ -1288,221 +1325,187 @@ function NetworkExecutionPanel({ crqId }: { crqId: string }) {
 
   return (
     <>
-      {showExecToast && selectedTool && (
-        <ExecStartToast tool={selectedTool} onDone={() => setShowExecToast(false)} />
-      )}
-      {showToolPicker && (
-        <ExecToolPickerModal
-          onSelect={handleToolSelect}
-          onCancel={() => setShowToolPicker(false)}
-        />
-      )}
+      {showToolPicker && <ExecToolPickerModal onSelect={handleToolSelect} onCancel={() => setShowToolPicker(false)} />}
+      {manualStage && <ManualValidationModal stage={manualStage} onSelect={(pick) => handleManualSubmit(manualStage, pick)} onCancel={() => setManualStage(null)} />}
+      {showToolToast && selectedTool && isAutomated && <ExecStartToast tool={selectedTool} label="Pre-Check Completed Successfully" onDone={() => setShowToolToast(false)} />}
+      {showExecToast && selectedTool && isAutomated && <ExecStartToast tool={selectedTool} label="Execution Started Successfully" onDone={() => setShowExecToast(false)} />}
+      {validationToast && <ValidationToast pick={validationToast.pick} stageName={validationToast.stageName} onDone={() => setValidationToast(null)} />}
 
       <div className="space-y-3">
-        {/* ── Progress stepper ── */}
+        {/* Stepper */}
         <div className="flex items-center gap-0 mb-1">
           {steps.map((step, i) => (
             <div key={step.label} className="flex items-center flex-1">
               <div className="flex flex-col items-center flex-1">
-                <div
-                  className={cn(
-                    "w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold border-2 transition-all duration-300",
-                    step.done
-                      ? "bg-green-500 border-green-500 text-white"
-                      : i === activeStep
-                      ? "bg-white border-indigo-500 text-indigo-600"
-                      : "bg-white border-slate-200 text-slate-400"
-                  )}
-                >
+                <div className={cn("w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold border-2 transition-all duration-300",
+                  step.done ? "bg-green-500 border-green-500 text-white" : i === activeStep ? "bg-white border-indigo-500 text-indigo-600" : "bg-white border-slate-200 text-slate-400")}>
                   {step.done ? <CheckCircle2 className="h-3.5 w-3.5" /> : i + 1}
                 </div>
-                <span
-                  className={cn(
-                    "text-[9px] uppercase tracking-wide font-semibold mt-1 text-center",
-                    step.done ? "text-green-600" : i === activeStep ? "text-indigo-600" : "text-slate-400"
-                  )}
-                >
+                <span className={cn("text-[9px] uppercase tracking-wide font-semibold mt-1 text-center",
+                  step.done ? "text-green-600" : i === activeStep ? "text-indigo-600" : "text-slate-400")}>
                   {step.label}
                 </span>
               </div>
               {i < steps.length - 1 && (
-                <div
-                  className={cn(
-                    "h-0.5 w-full mx-1 rounded-full transition-all duration-500",
-                    steps[i].done ? "bg-green-400" : "bg-slate-200"
-                  )}
-                />
+                <div className={cn("h-0.5 w-full mx-1 rounded-full transition-all duration-500", steps[i].done ? "bg-green-400" : "bg-slate-200")} />
               )}
             </div>
           ))}
         </div>
 
-        {/* ── 1. Pre-Check Status ── */}
-        <div className={cn("rounded-xl border px-4 py-3 transition-all duration-200", preCheckDone ? "border-green-200 bg-green-50/40" : "border-slate-200 bg-white")}>
+        {selectedTool && (
+          <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-medium px-1">
+            <ShieldAlert className="h-3 w-3 text-slate-400" />
+            Execution approach: <span className="font-semibold text-slate-700">{toolLabel(selectedTool)}</span>
+            {isManual && <span className="text-slate-400">— each step requires manual Pass / Fail / Cancel validation</span>}
+          </div>
+        )}
+
+        {/* Pre-Check */}
+        <div className={cn("rounded-xl border px-4 py-3 transition-all duration-200", preCheckDone ? "border-green-200 bg-green-50/40" : precheckPick && precheckPick !== "PASS" ? "border-red-200 bg-red-50/30" : "border-slate-200 bg-white")}>
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-2.5">
               <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", preCheckDone ? "bg-green-400" : "bg-slate-300")} />
               <span className="text-[10px] uppercase tracking-widest font-bold text-slate-500">Pre-Check Status</span>
-              <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700 border border-green-200">
-                <CheckCircle2 className="h-3 w-3" /> Yes
-              </span>
+              {preCheckDone && <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700 border border-green-200"><CheckCircle2 className="h-3 w-3" /> Yes</span>}
+              {!preCheckDone && <ManualPickBadge pick={precheckPick} />}
             </div>
-            <ReportActions label="Pre-Check Report" filename={`PRECHECK_${crqId}.pdf`} />
+            <div className="flex items-center gap-2">
+              {!selectedTool && (
+                <button onClick={() => setShowToolPicker(true)} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 transition shadow-sm">
+                  <Play className="h-3.5 w-3.5 fill-white" /> Start Pre-Check
+                </button>
+              )}
+              {isManual && !preCheckDone && (
+                <button onClick={() => setManualStage("precheck")} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100 transition shadow-sm">
+                  <Hand className="h-3.5 w-3.5" /> {precheckPick ? "Retry Pre-Check Validation" : "Run Pre-Check Validation"}
+                </button>
+              )}
+              {preCheckDone && <ReportActions label="Pre-Check Report" filename={`PRECHECK_${crqId}.pdf`} />}
+            </div>
           </div>
         </div>
 
-        {/* ── 2. Execution ── */}
-        {preCheckDone && (
+        {/* Execution (automated) */}
+        {preCheckDone && isAutomated && (
           <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 space-y-3">
             <div className="flex items-center justify-between flex-wrap gap-3">
               <div className="flex items-center gap-2.5">
-                <div
-                  className={cn(
-                    "w-1.5 h-1.5 rounded-full shrink-0",
-                    executionFinished ? "bg-green-400" : isRunning ? "bg-indigo-400 animate-pulse" : "bg-slate-300"
-                  )}
-                />
+                <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", executionFinished ? "bg-green-400" : isRunning ? "bg-indigo-400 animate-pulse" : "bg-slate-300")} />
                 <span className="text-[10px] uppercase tracking-widest font-bold text-slate-500">Execution</span>
-                {executionFinished && (
-                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 border border-indigo-200">
-                    <CheckCheck className="h-3 w-3" /> Finished
-                  </span>
-                )}
-                {isRunning && (
-                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 border border-indigo-200">
-                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
-                    Running
-                    {selectedTool && (
-                      <span className="opacity-60 font-normal capitalize ml-0.5">
-                        · {selectedTool === "infrasol" ? "InfraSol" : "GRASP"}
-                      </span>
-                    )}
-                  </span>
-                )}
-                {isPaused && (
-                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200">
-                    <Pause className="h-3 w-3" /> Paused
-                  </span>
-                )}
+                {executionFinished && <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 border border-indigo-200"><CheckCheck className="h-3 w-3" /> Finished</span>}
+                {isRunning && <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 border border-indigo-200"><span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" /> Running <span className="opacity-60 font-normal ml-0.5">· {toolLabel(selectedTool!)}</span></span>}
+                {isPaused && <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200"><Pause className="h-3 w-3" /> Paused</span>}
               </div>
-
               <div className="flex items-center gap-2">
-                {execState === "idle" && (
-                  <button
-                    onClick={() => setShowToolPicker(true)}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 transition shadow-sm"
-                  >
-                    <Play className="h-3.5 w-3.5 fill-white" />
-                    Start Execution
-                  </button>
-                )}
-                {isRunning && (
-                  <>
-                    <button
-                      onClick={() => setExecState("paused")}
-                      className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 text-xs font-semibold hover:bg-amber-100 transition shadow-sm"
-                    >
-                      <Pause className="h-3.5 w-3.5" /> Pause
-                    </button>
-                    <button
-                      onClick={() => setExecState("finished")}
-                      className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-green-600 text-white text-xs font-semibold hover:bg-green-700 transition shadow-sm"
-                    >
-                      <CheckCheck className="h-3.5 w-3.5" /> Finish
-                    </button>
-                  </>
-                )}
-                {isPaused && (
-                  <>
-                    <button
-                      onClick={() => { setExecState("running"); setShowExecToast(true); }}
-                      className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 bg-white text-slate-700 text-xs font-semibold hover:bg-slate-50 transition shadow-sm"
-                    >
-                      <Play className="h-3.5 w-3.5" /> Resume
-                    </button>
-                    <button
-                      onClick={() => setExecState("finished")}
-                      className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-green-600 text-white text-xs font-semibold hover:bg-green-700 transition shadow-sm"
-                    >
-                      <CheckCheck className="h-3.5 w-3.5" /> Finish
-                    </button>
-                  </>
-                )}
-                {executionFinished && (
-                  <ReportActions label="Execution Report" filename={`EXEC_${crqId}.pdf`} />
-                )}
+                {execState === "idle" && <button onClick={() => { setExecState("running"); setShowExecToast(true); }} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 transition shadow-sm"><Play className="h-3.5 w-3.5 fill-white" /> Start Execution</button>}
+                {isRunning && <>
+                  <button onClick={() => setExecState("Paused")} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 text-xs font-semibold hover:bg-amber-100 transition shadow-sm"><Pause className="h-3.5 w-3.5" /> Pause</button>
+                  <button onClick={() => setExecState("finished")} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-green-600 text-white text-xs font-semibold hover:bg-green-700 transition shadow-sm"><CheckCheck className="h-3.5 w-3.5" /> Finish</button>
+                </>}
+                {isPaused && <>
+                  <button onClick={() => { setExecState("running"); setShowExecToast(true); }} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 bg-white text-slate-700 text-xs font-semibold hover:bg-slate-50 transition shadow-sm"><Play className="h-3.5 w-3.5" /> Resume</button>
+                  <button onClick={() => setExecState("finished")} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-green-600 text-white text-xs font-semibold hover:bg-green-700 transition shadow-sm"><CheckCheck className="h-3.5 w-3.5" /> Finish</button>
+                </>}
+                {executionFinished && <ReportActions label="Execution Report" filename={`EXEC_${crqId}.pdf`} />}
               </div>
             </div>
           </div>
         )}
 
-        {/* ── 3. Post-Check Status ── */}
-        {executionFinished && (
+        {/* Execution (manual) */}
+        {preCheckDone && isManual && (
+          <div className={cn("rounded-xl border px-4 py-3 transition-all duration-200", executionFinished ? "border-green-200 bg-green-50/40" : executionPick && executionPick !== "PASS" ? "border-red-200 bg-red-50/30" : "border-slate-200 bg-white")}>
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", executionFinished ? "bg-green-400" : "bg-slate-300")} />
+                <span className="text-[10px] uppercase tracking-widest font-bold text-slate-500">Execution</span>
+                {executionFinished && <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 border border-indigo-200"><CheckCheck className="h-3 w-3" /> Finished</span>}
+                {!executionFinished && <ManualPickBadge pick={executionPick} />}
+              </div>
+              <div className="flex items-center gap-2">
+                {!executionFinished && <button onClick={() => setManualStage("execution")} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100 transition shadow-sm"><Hand className="h-3.5 w-3.5" /> {executionPick ? "Retry Execution Validation" : "Run Execution Validation"}</button>}
+                {executionFinished && <ReportActions label="Execution Report" filename={`EXEC_${crqId}.pdf`} />}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Post-Check (automated) */}
+        {executionFinished && isAutomated && (
           <div className={cn("rounded-xl border px-4 py-3 transition-all duration-200", postCheckDone ? "border-green-200 bg-green-50/40" : "border-slate-200 bg-white")}>
             <div className="flex items-center justify-between flex-wrap gap-3">
               <div className="flex items-center gap-2.5">
                 <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", postCheckDone ? "bg-green-400" : "bg-slate-300")} />
                 <span className="text-[10px] uppercase tracking-widest font-bold text-slate-500">Post-Check Status</span>
-                {postCheckDone && (
-                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700 border border-green-200">
-                    <CheckCircle2 className="h-3 w-3" /> Yes
-                  </span>
-                )}
+                {postCheckDone && <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700 border border-green-200"><CheckCircle2 className="h-3 w-3" /> Yes</span>}
               </div>
               <div className="flex items-center gap-2">
-                {!postCheckDone ? (
-                  <button
-                    onClick={() => setPostCheckDone(true)}
-                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-green-200 bg-green-50 text-green-700 text-xs font-semibold hover:bg-green-100 transition shadow-sm"
-                  >
-                    <CheckCircle2 className="h-3.5 w-3.5" />
-                    Mark Post-Check Done
-                  </button>
-                ) : (
-                  <ReportActions label="Post-Check Report" filename={`POSTCHECK_${crqId}.pdf`} />
-                )}
+                {!postCheckDone ? <button onClick={() => setPostCheckDone(true)} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-green-200 bg-green-50 text-green-700 text-xs font-semibold hover:bg-green-100 transition shadow-sm"><CheckCircle2 className="h-3.5 w-3.5" /> Mark Post-Check Done</button>
+                : <ReportActions label="Post-Check Report" filename={`POSTCHECK_${crqId}.pdf`} />}
               </div>
             </div>
           </div>
         )}
 
-        {/* ── 4. Pre & Post Check Comparison ── */}
-        {postCheckDone && (
+        {/* Post-Check (manual) */}
+        {executionFinished && isManual && (
+          <div className={cn("rounded-xl border px-4 py-3 transition-all duration-200", postCheckDone ? "border-green-200 bg-green-50/40" : postcheckPick && postcheckPick !== "PASS" ? "border-red-200 bg-red-50/30" : "border-slate-200 bg-white")}>
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", postCheckDone ? "bg-green-400" : "bg-slate-300")} />
+                <span className="text-[10px] uppercase tracking-widest font-bold text-slate-500">Post-Check Status</span>
+                {postCheckDone && <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700 border border-green-200"><CheckCircle2 className="h-3 w-3" /> Yes</span>}
+                {!postCheckDone && <ManualPickBadge pick={postcheckPick} />}
+              </div>
+              <div className="flex items-center gap-2">
+                {!postCheckDone && <button onClick={() => setManualStage("postcheck")} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100 transition shadow-sm"><Hand className="h-3.5 w-3.5" /> {postcheckPick ? "Retry Post-Check Validation" : "Run Post-Check Validation"}</button>}
+                {postCheckDone && <ReportActions label="Post-Check Report" filename={`POSTCHECK_${crqId}.pdf`} />}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Comparison (automated) */}
+        {postCheckDone && isAutomated && (
           <div className="rounded-xl border border-slate-200 bg-white px-4 py-4 space-y-3">
             <div className="flex items-center gap-2">
               <BarChart3 className="h-4 w-4 text-slate-400" />
-              <span className="text-xs font-semibold text-slate-700 uppercase tracking-widest">
-                Pre &amp; Post Check Comparison
-              </span>
+              <span className="text-xs font-semibold text-slate-700 uppercase tracking-widest">Pre &amp; Post Check Comparison</span>
               <span className="text-red-500 text-xs">*</span>
               <span className="ml-auto text-[10px] text-slate-400 font-medium">Mandatory</span>
             </div>
             <div className="flex gap-3">
               {(["Pass", "Fail"] as const).map((opt) => (
-                <button
-                  key={opt}
-                  onClick={() => setComparison(opt)}
-                  className={cn(
-                    "flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg border-2 text-sm font-semibold transition-all duration-150",
-                    comparison === opt
-                      ? opt === "Pass"
-                        ? "border-green-400 bg-green-50 text-green-700 shadow-sm scale-[1.02]"
-                        : "border-red-400 bg-red-50 text-red-700 shadow-sm scale-[1.02]"
-                      : "border-slate-200 text-slate-400 hover:border-slate-300 hover:text-slate-600"
-                  )}
-                >
-                  {opt === "Pass" ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
-                  {opt}
+                <button key={opt} onClick={() => setComparison(opt)} className={cn("flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg border-2 text-sm font-semibold transition-all duration-150",
+                  comparison === opt ? opt === "Pass" ? "border-green-400 bg-green-50 text-green-700 shadow-sm scale-[1.02]" : "border-red-400 bg-red-50 text-red-700 shadow-sm scale-[1.02]" : "border-slate-200 text-slate-400 hover:border-slate-300 hover:text-slate-600")}>
+                  {opt === "Pass" ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />} {opt}
                 </button>
               ))}
             </div>
-            {comparison && (
-              <ReportActions label="Comparison Report" filename={`COMPARE_${crqId}.pdf`} />
-            )}
+            {comparison && <ReportActions label="Comparison Report" filename={`COMPARE_${crqId}.pdf`} />}
           </div>
         )}
 
-        {/* ── Completion banner ── */}
+        {/* Comparison (manual) */}
+        {postCheckDone && isManual && (
+          <div className={cn("rounded-xl border px-4 py-4 space-y-3 transition-all duration-200", comparison === "Pass" ? "border-green-200 bg-green-50/40" : comparisonPick && comparisonPick !== "PASS" ? "border-red-200 bg-red-50/30" : "border-slate-200 bg-white")}>
+            <div className="flex items-center gap-2">
+              <BarChart3 className="h-4 w-4 text-slate-400" />
+              <span className="text-xs font-semibold text-slate-700 uppercase tracking-widest">Pre &amp; Post Check Comparison</span>
+              <span className="text-red-500 text-xs">*</span>
+              {comparison === "Pass" ? <span className="ml-auto inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700 border border-green-200"><CheckCircle2 className="h-3 w-3" /> Pass</span>
+              : comparison === "Fail" ? <span className="ml-auto inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200"><XCircle className="h-3 w-3" /> Fail</span>
+              : <span className="ml-auto text-[10px] text-slate-400 font-medium">Mandatory</span>}
+            </div>
+            <div className="flex items-center gap-2">
+              {comparison !== "Pass" && <button onClick={() => setManualStage("comparison")} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100 transition shadow-sm"><Hand className="h-3.5 w-3.5" /> {comparisonPick ? "Retry Comparison Validation" : "Run Comparison Validation"}</button>}
+              {comparison && <ReportActions label="Comparison Report" filename={`COMPARE_${crqId}.pdf`} />}
+            </div>
+          </div>
+        )}
+
+        {/* Completion banner */}
         {allComplete && (
           <div className="rounded-xl border border-green-200 bg-gradient-to-r from-green-50 to-emerald-50 px-5 py-4 flex items-center gap-4">
             <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center shrink-0">
@@ -1510,19 +1513,15 @@ function NetworkExecutionPanel({ crqId }: { crqId: string }) {
             </div>
             <div>
               <p className="text-sm font-semibold text-green-900">Network Execution Complete</p>
-              <p className="text-[11px] text-green-700 mt-0.5 leading-relaxed">
-                All checks passed. Pre-check, execution, post-check, and comparison are verified. This stage is ready for Task Closure.
-              </p>
+              <p className="text-[11px] text-green-700 mt-0.5 leading-relaxed">All checks passed. Pre-check, execution, post-check, and comparison are verified. This stage is ready for Task Closure.</p>
             </div>
           </div>
         )}
 
-        {/* ── Completion checklist ── */}
+        {/* Checklist */}
         {!allComplete && (
           <div className="rounded-lg border border-slate-100 bg-slate-50 px-4 py-3">
-            <div className="text-[9px] uppercase tracking-widest font-bold text-slate-400 mb-2">
-              Stage Completion Checklist
-            </div>
+            <div className="text-[9px] uppercase tracking-widest font-bold text-slate-400 mb-2">Stage Completion Checklist</div>
             <div className="space-y-1.5">
               {[
                 { label: "Pre-Check Status = Yes", done: preCheckDone },
@@ -1531,14 +1530,8 @@ function NetworkExecutionPanel({ crqId }: { crqId: string }) {
                 { label: "Pre & Post Check Comparison = Pass", done: comparison === "Pass" },
               ].map((item) => (
                 <div key={item.label} className="flex items-center gap-2">
-                  {item.done ? (
-                    <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
-                  ) : (
-                    <Clock className="h-3.5 w-3.5 text-slate-300 shrink-0" />
-                  )}
-                  <span className={cn("text-[11px] font-medium", item.done ? "text-green-700 line-through decoration-green-400/60" : "text-slate-500")}>
-                    {item.label}
-                  </span>
+                  {item.done ? <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" /> : <Clock className="h-3.5 w-3.5 text-slate-300 shrink-0" />}
+                  <span className={cn("text-[11px] font-medium", item.done ? "text-green-700 line-through decoration-green-400/60" : "text-slate-500")}>{item.label}</span>
                 </div>
               ))}
             </div>
@@ -1556,26 +1549,16 @@ function CrqDetail() {
   const { stage } = useSearch({ from: "/crq/$crqId" });
   const { plan, crq } = findCrq(crqId);
   const [pdfOpen, setPdfOpen] = useState(false);
-  const [executionState, setExecutionState] = useState<"idle" | "running" | "paused" | "finished">("idle");
+  const [executionState, setExecutionState] = useState<"idle" | "running" | "Paused" | "finished">("idle");
   const [showToast, setShowToast] = useState(false);
-
   const [mopAutoFilename, setMopAutoFilename] = useState<string | undefined>(undefined);
-
-  const [validationToast, setValidationToast] = useState<{
-    pick: "PASS" | "FAILED" | "CANCELLED";
-    stageName: string;
-  } | null>(null);
-
+  const [validationToast, setValidationToast] = useState<{ pick: "PASS" | "FAILED" | "CANCELLED"; stageName: string } | null>(null);
   const [stageRejections, setStageRejections] = useState<Record<string, RejectionDetails>>({});
 
   function handleStageRejectionChange(stageName: string, update: Partial<RejectionDetails>) {
     setStageRejections((prev) => ({
       ...prev,
-      [stageName]: {
-        ...{ pick: null, rejectionReason: "", rejectionOwner: "", rejectionDeviationReason: "" },
-        ...prev[stageName],
-        ...update,
-      },
+      [stageName]: { ...{ pick: null, rejectionReason: "", rejectionOwner: "", rejectionDeviationReason: "" }, ...prev[stageName], ...update },
     }));
   }
 
@@ -1585,15 +1568,16 @@ function CrqDetail() {
   }
 
   const currentStageName = stage ? STAGE_ID_TO_NAME[stage] : undefined;
+  const stageColor = stage ? STAGE_COLORS[stage] : null;
 
   function handleStartWorkflow() { setExecutionState("running"); setShowToast(true); }
   function handleFinish() { setExecutionState("finished"); }
-  function handlePause() { setExecutionState("paused"); }
+  function handlePause() { setExecutionState("Paused"); }
   function handleResume() { setExecutionState("running"); setShowToast(true); }
 
   const isIdle = executionState === "idle";
   const isRunning = executionState === "running";
-  const isPaused = executionState === "paused";
+  const isPaused = executionState === "Paused";
   const isFinished = executionState === "finished";
 
   return (
@@ -1601,24 +1585,10 @@ function CrqDetail() {
       <Sidebar active="workflow" onChange={() => {}} />
       <Header crumb={["CRQ Workflow", "CRQ Detail", crqId]} />
       {showToast && <ExecutionToast onDone={() => setShowToast(false)} />}
-      {validationToast && (
-        <ValidationToast
-          pick={validationToast.pick}
-          stageName={validationToast.stageName}
-          onDone={() => setValidationToast(null)}
-        />
-      )}
+      {validationToast && <ValidationToast pick={validationToast.pick} stageName={validationToast.stageName} onDone={() => setValidationToast(null)} />}
 
-      <PdfModal
-        open={pdfOpen}
-        onClose={() => setPdfOpen(false)}
-        crqId={crq?.id}
-        showMopCreation={stage === "mop"}
-        onMopReady={(_toolId, filename) => {
-          setMopAutoFilename(filename);
-          setPdfOpen(false);
-        }}
-      />
+      <PdfModal open={pdfOpen} onClose={() => setPdfOpen(false)} crqId={crq?.id} showMopCreation={stage === "mop"}
+        onMopReady={(_toolId, filename) => { setMopAutoFilename(filename); setPdfOpen(false); }} />
 
       <div className="ml-[220px] pt-14">
         <div className="px-5 py-5 max-w-[1400px]">
@@ -1627,31 +1597,15 @@ function CrqDetail() {
               <ArrowLeft className="h-4 w-4" />
             </Link>
             <div className="flex items-center gap-2">
-              {isIdle && (
-                <button onClick={handleStartWorkflow} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-200 bg-white text-slate-700 text-xs font-medium hover:bg-slate-50 shadow-sm transition">
-                  <Play className="h-3.5 w-3.5" /> Start Workflow
-                </button>
-              )}
-              {isRunning && (
-                <>
-                  <button onClick={handlePause} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 text-xs font-medium hover:bg-amber-100 shadow-sm transition">
-                    <Pause className="h-3.5 w-3.5" /> Pause
-                  </button>
-                  <button onClick={handleFinish} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white text-xs font-medium hover:bg-indigo-700 shadow-sm transition">
-                    <CheckCheck className="h-3.5 w-3.5" /> Finish
-                  </button>
-                </>
-              )}
-              {isPaused && (
-                <>
-                  <button onClick={handleResume} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-200 bg-white text-slate-700 text-xs font-medium hover:bg-slate-50 shadow-sm transition">
-                    <Play className="h-3.5 w-3.5" /> Resume
-                  </button>
-                  <button onClick={handleFinish} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white text-xs font-medium hover:bg-indigo-700 shadow-sm transition">
-                    <CheckCheck className="h-3.5 w-3.5" /> Finish
-                  </button>
-                </>
-              )}
+              {isIdle && <button onClick={handleStartWorkflow} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-200 bg-white text-slate-700 text-xs font-medium hover:bg-slate-50 shadow-sm transition"><Play className="h-3.5 w-3.5" /> Start Workflow</button>}
+              {isRunning && <>
+                <button onClick={handlePause} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 text-xs font-medium hover:bg-amber-100 shadow-sm transition"><Pause className="h-3.5 w-3.5" /> Pause</button>
+                <button onClick={handleFinish} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white text-xs font-medium hover:bg-indigo-700 shadow-sm transition"><CheckCheck className="h-3.5 w-3.5" /> Finish</button>
+              </>}
+              {isPaused && <>
+                <button onClick={handleResume} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-200 bg-white text-slate-700 text-xs font-medium hover:bg-slate-50 shadow-sm transition"><Play className="h-3.5 w-3.5" /> Resume</button>
+                <button onClick={handleFinish} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white text-xs font-medium hover:bg-indigo-700 shadow-sm transition"><CheckCheck className="h-3.5 w-3.5" /> Finish</button>
+              </>}
               {isFinished && <span className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-green-50 border border-green-200 text-green-700 text-xs font-medium" />}
             </div>
           </div>
@@ -1659,8 +1613,8 @@ function CrqDetail() {
           {/* ── Dark header card ── */}
           <div className="rounded-xl overflow-hidden mb-4 shadow-sm" style={{ background: "linear-gradient(135deg, #1a1040 0%, #1e2a5e 55%, #1a3a6e 100%)" }}>
             <div className="px-5 py-4">
-              <div className="flex items-start justify-between">
-                <div>
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
                   <div className="text-[10px] uppercase tracking-widest mb-1" style={{ color: "rgba(147, 197, 253, 1)" }}>CRQ Number</div>
                   <h1 className="font-mono text-xl font-semibold text-white tracking-tight">{crqId}</h1>
                   <div className="flex items-center gap-2 mt-2.5 flex-wrap">
@@ -1687,9 +1641,42 @@ function CrqDetail() {
                     </span>
                   </div>
                 </div>
-                {isRunning && <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" /><span className="text-[11px] font-medium" style={{ color: "rgba(134,239,172,0.9)" }}>Running</span></div>}
-                {isPaused && <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-amber-400" /><span className="text-[11px] font-medium" style={{ color: "rgba(252,211,77,0.9)" }}>Paused</span></div>}
-                {isFinished && <div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4" style={{ color: "rgba(134,239,172,0.9)" }} /><span className="text-[11px] font-medium" style={{ color: "rgba(134,239,172,0.9)" }}>Completed</span></div>}
+
+                {/* ── Top-right: stage + workflow state ── */}
+                <div className="flex flex-col items-end gap-2 shrink-0">
+                  {/* Current stage badge */}
+                  {currentStageName && stageColor && (
+                    <div className="flex flex-col items-end gap-0.5">
+                      <span className="text-[9px] uppercase tracking-widest font-semibold" style={{ color: "rgba(147,197,253,0.7)" }}>Current Stage</span>
+                      <span
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold"
+                        style={{ background: stageColor.bg, color: stageColor.text, border: `1px solid ${stageColor.border}` }}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: stageColor.dot }} />
+                        {currentStageName}
+                      </span>
+                    </div>
+                  )}
+                  {/* Workflow run state */}
+                  {isRunning && (
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                      <span className="text-[11px] font-medium" style={{ color: "rgba(134,239,172,0.9)" }}>Running</span>
+                    </div>
+                  )}
+                  {isPaused && (
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-amber-400" />
+                      <span className="text-[11px] font-medium" style={{ color: "rgba(252,211,77,0.9)" }}>Paused</span>
+                    </div>
+                  )}
+                  {isFinished && (
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4" style={{ color: "rgba(134,239,172,0.9)" }} />
+                      <span className="text-[11px] font-medium" style={{ color: "rgba(134,239,172,0.9)" }}>Completed</span>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
             {plan && (
@@ -1716,32 +1703,13 @@ function CrqDetail() {
           ) : (
             <div className="space-y-3">
               <PlanDetailsSectionInner plan={plan!} crqId={crq.id} onPreview={() => setPdfOpen(true)} />
-              <CRQAttributesSection
-                crq={crq}
-                plan={plan!}
-                currentStageName={currentStageName}
-                stageRejections={stageRejections}
-                onStageRejectionChange={handleStageRejectionChange}
-              />
+              <CRQAttributesSection crq={crq} plan={plan!} currentStageName={currentStageName} stageRejections={stageRejections} onStageRejectionChange={handleStageRejectionChange} />
               <ValidationSection
-                crq={crq}
-                stage={stage}
-                currentStageName={currentStageName}
-                stageRejections={stageRejections}
-                mopAutoFilename={mopAutoFilename}
-                onMopReady={(_toolId, filename) => setMopAutoFilename(filename)}
-                onPickChange={(pick) => {
-                  const stageName = stage ? STAGE_ID_TO_NAME[stage] : undefined;
-                  if (stageName && pick) handleStageRejectionChange(stageName, { pick });
-                }}
-                onDetailsChange={(details) => {
-                  const stageName = stage ? STAGE_ID_TO_NAME[stage] : undefined;
-                  if (stageName) handleStageRejectionChange(stageName, details);
-                }}
-                onSubmit={(pick) => {
-                  const stageName = stage ? STAGE_ID_TO_NAME[stage] : "Validation";
-                  handleValidationSubmit(stageName, pick);
-                }}
+                crq={crq} stage={stage} currentStageName={currentStageName} stageRejections={stageRejections}
+                mopAutoFilename={mopAutoFilename} onMopReady={(_toolId, filename) => setMopAutoFilename(filename)}
+                onPickChange={(pick) => { const sn = stage ? STAGE_ID_TO_NAME[stage] : undefined; if (sn && pick) handleStageRejectionChange(sn, { pick }); }}
+                onDetailsChange={(details) => { const sn = stage ? STAGE_ID_TO_NAME[stage] : undefined; if (sn) handleStageRejectionChange(sn, details); }}
+                onSubmit={(pick) => { const sn = stage ? STAGE_ID_TO_NAME[stage] : "Validation"; handleValidationSubmit(sn, pick); }}
               />
             </div>
           )}
@@ -1753,9 +1721,7 @@ function CrqDetail() {
 
 // ─── Section wrapper ──────────────────────────────────────────────────────────
 
-function Section({ title, subtitle, defaultOpen = true, right, children }: {
-  title: string; subtitle?: string; defaultOpen?: boolean; right?: React.ReactNode; children: React.ReactNode;
-}) {
+function Section({ title, subtitle, defaultOpen = true, right, children }: { title: string; subtitle?: string; defaultOpen?: boolean; right?: React.ReactNode; children: React.ReactNode }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
@@ -1782,9 +1748,7 @@ function Section({ title, subtitle, defaultOpen = true, right, children }: {
 function Field({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) {
   return (
     <div className="group rounded-lg border border-slate-200 px-4 py-3 bg-white hover:border-indigo-300 hover:shadow-sm transition-all duration-150 cursor-default">
-      <div className="text-[9px] uppercase tracking-widest text-slate-600 font-bold mb-1.5 leading-none group-hover:text-indigo-600 transition-colors duration-150">
-        {label}
-      </div>
+      <div className="text-[9px] uppercase tracking-widest text-slate-600 font-bold mb-1.5 leading-none group-hover:text-indigo-600 transition-colors duration-150">{label}</div>
       <div className={cn("text-[14px] text-slate-900 font-semibold leading-snug", mono && "font-mono text-[12px] text-slate-700")}>
         {value ?? <span className="text-slate-400 font-normal">—</span>}
       </div>
@@ -1794,21 +1758,13 @@ function Field({ label, value, mono }: { label: string; value: React.ReactNode; 
 
 function FieldGrid({ children, cols = 3 }: { children: React.ReactNode; cols?: number }) {
   return (
-    <div className={cn("grid gap-3", cols === 3 && "grid-cols-3", cols === 2 && "grid-cols-2")}>
-      {children}
-    </div>
+    <div className={cn("grid gap-3", cols === 3 && "grid-cols-3", cols === 2 && "grid-cols-2")}>{children}</div>
   );
 }
 
-// ─── Rejection badge helper ───────────────────────────────────────────────────
-
 function RejectionBadge({ pick }: { pick: "PASS" | "FAILED" | "CANCELLED" | null | undefined }) {
   if (!pick) return <span className="text-slate-400 font-normal">—</span>;
-  const map = {
-    PASS: "bg-green-50 text-green-700 border-green-200",
-    FAILED: "bg-red-50 text-red-700 border-red-200",
-    CANCELLED: "bg-slate-100 text-slate-600 border-slate-200",
-  };
+  const map = { PASS: "bg-green-50 text-green-700 border-green-200", FAILED: "bg-red-50 text-red-700 border-red-200", CANCELLED: "bg-slate-100 text-slate-600 border-slate-200" };
   return <span className={cn("text-[11px] px-2.5 py-1 rounded-md font-semibold border inline-block", map[pick])}>{pick}</span>;
 }
 
@@ -1816,57 +1772,38 @@ function RejectionBadge({ pick }: { pick: "PASS" | "FAILED" | "CANCELLED" | null
 
 function PlanDetailsSectionInner({ plan, onPreview, crqId }: { plan: Plan; onPreview: () => void; crqId?: string }) {
   const [tasksModal, setTasksModal] = useState<{ tasks: Task[]; crqId: string } | null>(null);
-
   return (
     <>
-      <Section
-        title="Plan Details"
-        subtitle="Tasks for this CRQ"
-        right={
-          <button onClick={onPreview} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-xs text-slate-600 transition">
-            <FileText className="h-3.5 w-3.5" /> Preview Plan PDF
-          </button>
-        }
-      >
+      <Section title="Plan Details" subtitle="Tasks for this CRQ" right={
+        <button onClick={onPreview} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-xs text-slate-600 transition">
+          <FileText className="h-3.5 w-3.5" /> Preview Plan PDF
+        </button>
+      }>
         <div className="space-y-4">
           {(crqId ? plan.crqs.filter((c) => c.id === crqId) : plan.crqs).map((c) => {
             const tasks = TASKS_BY_CRQ[c.id] ?? TASKS_BY_CRQ.default;
-            const completedCount = tasks.filter((t) =>
-              t.status === "Completed" || t.status === "Closed" || t.status === "Done"
-            ).length;
-
+            const completedCount = tasks.filter((t) => t.status === "Completed" || t.status === "Closed" || t.status === "Done").length;
             return (
               <div key={c.id} className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50/60 px-5 py-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0">
-                    <ListTodo className="h-4 w-4 text-indigo-500" />
-                  </div>
+                  <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0"><ListTodo className="h-4 w-4 text-indigo-500" /></div>
                   <div>
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] uppercase tracking-wide text-slate-400">CRQ</span>
                       <span className="font-mono text-xs text-indigo-600 font-semibold">{c.id}</span>
                     </div>
-                    <div className="flex items-center gap-2 mt-1">
-                      <TaskStatusBadge completed={completedCount} total={tasks.length} />
-                    </div>
+                    <div className="flex items-center gap-2 mt-1"><TaskStatusBadge completed={completedCount} total={tasks.length} /></div>
                   </div>
                 </div>
-                <button
-                  onClick={() => setTasksModal({ tasks, crqId: c.id })}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-indigo-200 bg-white text-indigo-600 text-xs font-semibold hover:bg-indigo-50 hover:border-indigo-300 transition shadow-sm"
-                >
-                  <ListTodo className="h-3.5 w-3.5" />
-                  View Tasks
+                <button onClick={() => setTasksModal({ tasks, crqId: c.id })} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-indigo-200 bg-white text-indigo-600 text-xs font-semibold hover:bg-indigo-50 hover:border-indigo-300 transition shadow-sm">
+                  <ListTodo className="h-3.5 w-3.5" /> View Tasks
                 </button>
               </div>
             );
           })}
         </div>
       </Section>
-
-      {tasksModal && (
-        <TasksModal tasks={tasksModal.tasks} crqId={tasksModal.crqId} onClose={() => setTasksModal(null)} />
-      )}
+      {tasksModal && <TasksModal tasks={tasksModal.tasks} crqId={tasksModal.crqId} onClose={() => setTasksModal(null)} />}
     </>
   );
 }
@@ -1924,6 +1861,8 @@ function buildStages(crq: CRQRecord, stageRejections: Record<string, RejectionDe
         { label: "Impacted Parties", value: "Enterprise, Mobility" },
         { label: "Business Justification", value: "Capacity augmentation" },
         { label: "Change ID", value: crq.id },
+        { label: "MSAN Count", value: 6 },
+        { label: "Customer Count", value: 1240 },
         { label: "Type of CR", value: "Normal" },
         { label: "Domain", value: "IP / MPLS" },
         { label: "Remark", value: "Impact analysis completed. No dependencies identified. Customer notification sent." },
@@ -1981,6 +1920,8 @@ function buildStages(crq: CRQRecord, stageRejections: Record<string, RejectionDe
       fields: [
         { label: "Customer Type", value: "Enterprise" },
         { label: "Network Type", value: "IP / MPLS" },
+        { label: "MSAN Count", value: 6 },
+        { label: "Customer Count", value: 1240 },
         { label: "MOP Preparation Method", value: "Template Based" },
         { label: "Vendor Name", value: crq.vendor },
         { label: "Change Requestor", value: "Rahul Sharma (B0316607)" },
@@ -2029,10 +1970,8 @@ const STAGE_RESCHEDULE: Record<string, { label: string; govKey: string }> = {
   "MOP Creation": { label: "Reschedule CRQ", govKey: "mop" },
   "Scheduling Approval": { label: "Reschedule CRQ", govKey: "schedule" },
   "Network Execution": { label: "Reschedule CRQ", govKey: "exec" },
-  "Task Closure": { label: "Reschedule CRQ", govKey: "closure" },
+  // "Task Closure": { label: "Reschedule CRQ", govKey: "closure" },
 };
-
-// ─── Combined CRQ Attributes Section ─────────────────────────────────────────
 
 function FieldGroup({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -2046,27 +1985,18 @@ function FieldGroup({ label, children }: { label: string; children: React.ReactN
   );
 }
 
-function CRQAttributesSection({
-  crq,
-  plan,
-  currentStageName,
-  stageRejections,
-  onStageRejectionChange,
-}: {
-  crq: CRQRecord;
-  plan: Plan;
-  currentStageName?: string;
+function CRQAttributesSection({ crq, plan, currentStageName, stageRejections, onStageRejectionChange }: {
+  crq: CRQRecord; plan: Plan; currentStageName?: string;
   stageRejections: Record<string, RejectionDetails>;
   onStageRejectionChange: (stageName: string, update: Partial<RejectionDetails>) => void;
 }) {
   const allStages = buildStages(crq, stageRejections);
   const cutoffIdx = currentStageName ? allStages.findIndex((s) => s.name === currentStageName) : -1;
   const visibleStages = cutoffIdx >= 0 ? allStages.slice(0, cutoffIdx + 1) : allStages;
-
   const tabs = ["General", ...visibleStages.map((s) => s.name)];
   const [active, setActive] = useState("General");
 
-  const isCanceled = crq.status === "Canceled";
+  const isRejected = crq.status === "Rejected";
   const reschedCfg = STAGE_RESCHEDULE[active];
   const currentStage = visibleStages.find((s) => s.name === active);
 
@@ -2079,43 +2009,24 @@ function CRQAttributesSection({
           <span className="text-xs text-slate-500">— General details & stage-wise fields</span>
         </div>
       </div>
-
-      {/* ── Folder tab bar ── */}
       <div className="flex items-end gap-0 px-5 pt-3 bg-slate-50 border-b border-slate-200 overflow-x-auto">
         {tabs.map((tab) => {
           const isActive = tab === active;
           const stageObj = visibleStages.find((s) => s.name === tab);
           const rejection = stageObj ? stageRejections[stageObj.name] : undefined;
-          const pickDot = rejection?.pick
-            ? rejection.pick === "PASS" ? "bg-green-400"
-            : rejection.pick === "FAILED" ? "bg-red-400"
-            : "bg-slate-400"
-            : null;
-
+          const pickDot = rejection?.pick ? rejection.pick === "PASS" ? "bg-green-400" : rejection.pick === "FAILED" ? "bg-red-400" : "bg-slate-400" : null;
           return (
             <button key={tab} onClick={() => setActive(tab)}
               className={cn("group relative flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold whitespace-nowrap transition-all duration-150 border-t border-x rounded-t-lg -mb-px",
-                isActive ? "bg-white border-slate-200 text-slate-800 shadow-[0_-2px_6px_rgba(99,102,241,0.08)] z-10"
-                : "bg-slate-50 border-transparent text-slate-400 hover:text-slate-700 hover:bg-white hover:border-slate-200 hover:shadow-[0_-2px_4px_rgba(0,0,0,0.04)]")}>
-              {tab === "General" && (
-                <span className={cn("w-1.5 h-1.5 rounded-full transition-all duration-150", isActive ? "bg-indigo-500" : "bg-slate-300 group-hover:bg-indigo-300")} />
-              )}
+                isActive ? "bg-white border-slate-200 text-slate-800 shadow-[0_-2px_6px_rgba(99,102,241,0.08)] z-10" : "bg-slate-50 border-transparent text-slate-400 hover:text-slate-700 hover:bg-white hover:border-slate-200 hover:shadow-[0_-2px_4px_rgba(0,0,0,0.04)]")}>
+              {tab === "General" && <span className={cn("w-1.5 h-1.5 rounded-full transition-all duration-150", isActive ? "bg-indigo-500" : "bg-slate-300 group-hover:bg-indigo-300")} />}
               {tab}
-              {stageObj && (
-                <span className={cn("ml-0.5 text-[9px] px-1.5 py-0.5 rounded-full font-bold",
-                  isActive ? "bg-indigo-50 text-indigo-600" : "bg-slate-200 text-slate-400")}>
-                  {stageObj.fields.length}
-                </span>
-              )}
-              {pickDot && (
-                <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", pickDot)} />
-              )}
+              {stageObj && <span className={cn("ml-0.5 text-[9px] px-1.5 py-0.5 rounded-full font-bold", isActive ? "bg-indigo-50 text-indigo-600" : "bg-slate-200 text-slate-400")}>{stageObj.fields.length}</span>}
+              {pickDot && <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", pickDot)} />}
             </button>
           );
         })}
       </div>
-
-      {/* ── Tab content ── */}
       <div className="px-6 py-5">
         {active === "General" && (
           <div className="space-y-6">
@@ -2140,7 +2051,6 @@ function CRQAttributesSection({
             </FieldGroup>
           </div>
         )}
-
         {currentStage && (
           <div className="space-y-5">
             <div className="grid grid-cols-3 gap-3">
@@ -2149,20 +2059,13 @@ function CRQAttributesSection({
                   mono={typeof f.value === "string" && (f.label.toLowerCase().includes("time") || f.label.toLowerCase().includes("date") || f.label.toLowerCase().includes("document"))} />
               ))}
             </div>
-
-            {reschedCfg && !isCanceled && (
+            {reschedCfg && !isRejected && (
               active === "MOP Creation" ? (
-                <RescheduleAccordion label="Reschedule CRQ">
-                  <MopReschedulePanel crqId={crq.id} reviewStart={crq.reviewStart} />
-                </RescheduleAccordion>
+                <RescheduleAccordion label="Reschedule CRQ"><MopReschedulePanel crqId={crq.id} reviewStart={crq.reviewStart} /></RescheduleAccordion>
               ) : active === "Network Execution" ? (
-                <RescheduleAccordion label="Reschedule CRQ">
-                  <ExecReschedulePanel crqId={crq.id} />
-                </RescheduleAccordion>
+                <RescheduleAccordion label="Reschedule CRQ"><ExecReschedulePanel crqId={crq.id} /></RescheduleAccordion>
               ) : (
-                <RescheduleAccordion label={reschedCfg.label}>
-                  <RescheduleForm govKey={reschedCfg.govKey} onSubmit={(d) => console.log("Reschedule submitted", { stage: active, ...d })} />
-                </RescheduleAccordion>
+                <RescheduleAccordion label={reschedCfg.label}><RescheduleForm govKey={reschedCfg.govKey} onSubmit={(d) => console.log("Reschedule submitted", { stage: active, ...d })} /></RescheduleAccordion>
               )
             )}
           </div>
@@ -2174,14 +2077,8 @@ function CRQAttributesSection({
 
 // ─── MOP Validation Panel ─────────────────────────────────────────────────────
 
-function MopValidationPanel({
-  crq,
-  stageRejections,
-  onRejectionChange,
-  onSubmit,
-}: {
-  crq: CRQRecord;
-  stageRejections: Record<string, RejectionDetails>;
+function MopValidationPanel({ crq, stageRejections, onRejectionChange, onSubmit }: {
+  crq: CRQRecord; stageRejections: Record<string, RejectionDetails>;
   onRejectionChange: (stageName: string, update: Partial<RejectionDetails>) => void;
   onSubmit?: (pick: "PASS" | "FAILED" | "CANCELLED") => void;
 }) {
@@ -2199,20 +2096,11 @@ function MopValidationPanel({
   if (submitted) {
     return (
       <div className="p-6">
-        <div className={cn(
-          "flex items-center gap-3 rounded-lg border px-4 py-3",
-          current.pick === "PASS" ? "bg-green-50 border-green-100" :
-          current.pick === "FAILED" ? "bg-red-50 border-red-100" :
-          "bg-slate-50 border-slate-200"
-        )}>
+        <div className={cn("flex items-center gap-3 rounded-lg border px-4 py-3", current.pick === "PASS" ? "bg-green-50 border-green-100" : current.pick === "FAILED" ? "bg-red-50 border-red-100" : "bg-slate-50 border-slate-200")}>
           {current.pick === "PASS" && <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />}
           {current.pick === "FAILED" && <XCircle className="h-4 w-4 text-red-500 shrink-0" />}
           {current.pick === "CANCELLED" && <Ban className="h-4 w-4 text-slate-400 shrink-0" />}
-          <span className={cn("text-sm font-medium",
-            current.pick === "PASS" ? "text-green-800" :
-            current.pick === "FAILED" ? "text-red-800" :
-            "text-slate-700"
-          )}>
+          <span className={cn("text-sm font-medium", current.pick === "PASS" ? "text-green-800" : current.pick === "FAILED" ? "text-red-800" : "text-slate-700")}>
             Validation submitted — <span className="font-semibold">{current.pick}</span>
           </span>
         </div>
@@ -2247,67 +2135,31 @@ function MopValidationPanel({
           })}
         </div>
       </div>
-
       {showRejectionForm && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-3">
           <h4 className="font-semibold text-amber-900 text-sm">Rejection Details</h4>
           <div>
             <label className="text-xs font-semibold text-slate-700 mb-1 block">Rejection Reason <span className="text-red-500">*</span></label>
-            <textarea rows={2} value={current.rejectionReason}
-              onChange={(e) => onRejectionChange(stageName, { rejectionReason: e.target.value })}
-              placeholder="Enter rejection reason..."
-              className="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300 resize-none bg-white" />
+            <textarea rows={2} value={current.rejectionReason} onChange={(e) => onRejectionChange(stageName, { rejectionReason: e.target.value })} placeholder="Enter rejection reason..." className="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300 resize-none bg-white" />
           </div>
           <div>
             <label className="text-xs font-semibold text-slate-700 mb-1 block">Rejection Owner <span className="text-red-500">*</span></label>
-            <input type="text" value={current.rejectionOwner}
-              onChange={(e) => onRejectionChange(stageName, { rejectionOwner: e.target.value })}
-              placeholder="Enter owner name or ID..."
-              className="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300 bg-white" />
+            <input type="text" value={current.rejectionOwner} onChange={(e) => onRejectionChange(stageName, { rejectionOwner: e.target.value })} placeholder="Enter owner name or ID..." className="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300 bg-white" />
           </div>
           <div>
             <label className="text-xs font-semibold text-slate-700 mb-1 block">Rejection Deviation Reason</label>
-            <textarea rows={2} value={current.rejectionDeviationReason}
-              onChange={(e) => onRejectionChange(stageName, { rejectionDeviationReason: e.target.value })}
-              placeholder="Enter deviation reason (optional)..."
-              className="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300 resize-none bg-white" />
+            <textarea rows={2} value={current.rejectionDeviationReason} onChange={(e) => onRejectionChange(stageName, { rejectionDeviationReason: e.target.value })} placeholder="Enter deviation reason (optional)..." className="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300 resize-none bg-white" />
           </div>
         </div>
       )}
-
       <div>
-        <label className="block text-[10px] uppercase tracking-widest font-semibold text-slate-400 mb-1.5">
-          Remark <span className="normal-case font-normal">(Optional)</span>
-        </label>
-        <textarea rows={4} value={remark} onChange={(e) => setRemark(e.target.value)}
-          placeholder="Provide a reason for the failure or cancellation..."
-          className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 resize-none transition" />
+        <label className="block text-[10px] uppercase tracking-widest font-semibold text-slate-400 mb-1.5">Remark <span className="normal-case font-normal">(Optional)</span></label>
+        <textarea rows={4} value={remark} onChange={(e) => setRemark(e.target.value)} placeholder="Provide a reason for the failure or cancellation..." className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 resize-none transition" />
       </div>
       <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-        <button
-          onClick={() => {
-            onRejectionChange(stageName, { pick: null, rejectionReason: "", rejectionOwner: "", rejectionDeviationReason: "" });
-            setRemark("");
-          }}
-          className="text-sm font-bold text-slate-500 hover:text-slate-700 uppercase tracking-widest transition"
-        >
-          Reset
-        </button>
-        <button
-          disabled={!canSubmit}
-          onClick={() => {
-            if (current.pick) {
-              setSubmitted(true);
-              onSubmit?.(current.pick);
-            }
-          }}
-          className={cn(
-            "px-6 py-2.5 text-xs font-semibold uppercase tracking-widest rounded-lg transition shadow-sm",
-            canSubmit
-              ? "bg-indigo-600 text-white hover:bg-indigo-700 cursor-pointer"
-              : "bg-slate-100 text-slate-400 cursor-not-allowed"
-          )}
-        >
+        <button onClick={() => { onRejectionChange(stageName, { pick: null, rejectionReason: "", rejectionOwner: "", rejectionDeviationReason: "" }); setRemark(""); }} className="text-sm font-bold text-slate-500 hover:text-slate-700 uppercase tracking-widest transition">Reset</button>
+        <button disabled={!canSubmit} onClick={() => { if (current.pick) { setSubmitted(true); onSubmit?.(current.pick); } }}
+          className={cn("px-6 py-2.5 text-xs font-semibold uppercase tracking-widest rounded-lg transition shadow-sm", canSubmit ? "bg-indigo-600 text-white hover:bg-indigo-700 cursor-pointer" : "bg-slate-100 text-slate-400 cursor-not-allowed")}>
           Submit Validation
         </button>
       </div>
@@ -2317,23 +2169,9 @@ function MopValidationPanel({
 
 // ─── Validation Section ───────────────────────────────────────────────────────
 
-function ValidationSection({
-  crq,
-  stage,
-  currentStageName,
-  stageRejections,
-  mopAutoFilename,
-  onMopReady,
-  onPickChange,
-  onDetailsChange,
-  onSubmit,
-}: {
-  crq: CRQRecord;
-  stage?: string;
-  currentStageName?: string;
-  stageRejections: Record<string, RejectionDetails>;
-  mopAutoFilename?: string;
-  onMopReady?: (toolId: "infrasol" | "grasp", filename: string) => void;
+function ValidationSection({ crq, stage, currentStageName, stageRejections, mopAutoFilename, onMopReady, onPickChange, onDetailsChange, onSubmit }: {
+  crq: CRQRecord; stage?: string; currentStageName?: string; stageRejections: Record<string, RejectionDetails>;
+  mopAutoFilename?: string; onMopReady?: (toolId: "infrasol" | "grasp", filename: string) => void;
   onPickChange: (v: "PASS" | "FAILED" | "CANCELLED" | null) => void;
   onDetailsChange?: (details: Partial<RejectionDetails>) => void;
   onSubmit?: (pick: "PASS" | "FAILED" | "CANCELLED") => void;
@@ -2341,32 +2179,20 @@ function ValidationSection({
   const stageName = stage ? STAGE_ID_TO_NAME[stage] : undefined;
   const current = stageName ? stageRejections[stageName] : undefined;
   const currentPick = current?.pick ?? null;
-
   const [planSubmitted, setPlanSubmitted] = useState(false);
 
   if (stage === "closure") return null;
 
-  // ── Network Execution stage: full enhanced workflow ───────────────────────
   if (stage === "exec") {
-    return (
-      <Section title="Validation" subtitle="Network Execution">
-        <NetworkExecutionPanel crqId={crq.id} />
-      </Section>
-    );
+    return <Section title="Validation" subtitle="Network Execution"><NetworkExecutionPanel crqId={crq.id} /></Section>;
   }
 
   if (stage === "mopv") {
     return (
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <MopValidationPanel
-          crq={crq}
-          stageRejections={stageRejections}
-          onRejectionChange={(sn, update) => {
-            if (update.pick !== undefined) onPickChange(update.pick);
-            onDetailsChange?.(update);
-          }}
-          onSubmit={(pick) => onSubmit?.(pick)}
-        />
+        <MopValidationPanel crq={crq} stageRejections={stageRejections}
+          onRejectionChange={(sn, update) => { if (update.pick !== undefined) onPickChange(update.pick); onDetailsChange?.(update); }}
+          onSubmit={(pick) => onSubmit?.(pick)} />
       </div>
     );
   }
@@ -2374,15 +2200,9 @@ function ValidationSection({
   if (stage === "mop") {
     return (
       <div className="space-y-3">
-        <ExecuteMopCreation
-          crqId={crq.id}
-          onMopReady={(toolId, filename) => onMopReady?.(toolId, filename)}
-        />
+        <ExecuteMopCreation crqId={crq.id} onMopReady={(toolId, filename) => onMopReady?.(toolId, filename)} />
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <MopUploadPanel
-            crqId={crq.id}
-            prefilledFilename={mopAutoFilename}
-          />
+          <MopUploadPanel crqId={crq.id} prefilledFilename={mopAutoFilename} />
         </div>
       </div>
     );
@@ -2392,10 +2212,7 @@ function ValidationSection({
     return (
       <Section title="Validation" subtitle="Impact Analysis Review">
         <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-          <ImpactAnalysisPanel crq={crq} onPickChange={(v) => {
-            const normalized = v === "FAIL" ? "FAILED" : v === "CANCEL" ? "CANCELLED" : v;
-            onPickChange(normalized);
-          }} />
+          <ImpactAnalysisPanel crq={crq} onPickChange={(v) => { const normalized = v === "FAIL" ? "FAILED" : v === "CANCEL" ? "CANCELLED" : v; onPickChange(normalized); }} />
         </div>
       </Section>
     );
@@ -2415,20 +2232,11 @@ function ValidationSection({
     if (planSubmitted) {
       return (
         <Section title="Validation" subtitle="CRQ Validation">
-          <div className={cn(
-            "flex items-center gap-3 rounded-lg border px-4 py-3",
-            currentPick === "PASS" ? "bg-green-50 border-green-100" :
-            currentPick === "FAILED" ? "bg-red-50 border-red-100" :
-            "bg-slate-50 border-slate-200"
-          )}>
+          <div className={cn("flex items-center gap-3 rounded-lg border px-4 py-3", currentPick === "PASS" ? "bg-green-50 border-green-100" : currentPick === "FAILED" ? "bg-red-50 border-red-100" : "bg-slate-50 border-slate-200")}>
             {currentPick === "PASS" && <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />}
             {currentPick === "FAILED" && <XCircle className="h-4 w-4 text-red-500 shrink-0" />}
             {currentPick === "CANCELLED" && <Ban className="h-4 w-4 text-slate-400 shrink-0" />}
-            <span className={cn("text-sm font-medium",
-              currentPick === "PASS" ? "text-green-800" :
-              currentPick === "FAILED" ? "text-red-800" :
-              "text-slate-700"
-            )}>
+            <span className={cn("text-sm font-medium", currentPick === "PASS" ? "text-green-800" : currentPick === "FAILED" ? "text-red-800" : "text-slate-700")}>
               Validation submitted — <span className="font-semibold">{currentPick}</span>
             </span>
           </div>
@@ -2449,42 +2257,25 @@ function ValidationSection({
                 const isSelected = currentPick === t.id;
                 return (
                   <div key={t.id}>
-                    <button
-                      onClick={() => {
-                        onPickChange(t.id as "PASS" | "FAILED" | "CANCELLED");
-                        if (t.id === "PASS") {
-                          onDetailsChange?.({ rejectionReason: "", rejectionOwner: "", rejectionDeviationReason: "" });
-                        }
-                      }}
-                      className={cn("w-full flex items-center gap-3 p-4 rounded-xl border-2 transition-all duration-200",
-                        isSelected ? `${t.border} ${t.bg} scale-[1.02] shadow-sm` : "border-slate-200 hover:border-slate-300")}>
+                    <button onClick={() => { onPickChange(t.id as "PASS" | "FAILED" | "CANCELLED"); if (t.id === "PASS") onDetailsChange?.({ rejectionReason: "", rejectionOwner: "", rejectionDeviationReason: "" }); }}
+                      className={cn("w-full flex items-center gap-3 p-4 rounded-xl border-2 transition-all duration-200", isSelected ? `${t.border} ${t.bg} scale-[1.02] shadow-sm` : "border-slate-200 hover:border-slate-300")}>
                       <Icon className={cn("h-6 w-6", t.color)} />
                       <span className="font-semibold text-slate-800">{t.label}</span>
                     </button>
-
                     {isSelected && (t.id === "FAILED" || t.id === "CANCELLED") && (
                       <div className="mt-3 p-4 rounded-lg border border-amber-200 bg-amber-50 space-y-3">
                         <h4 className="font-semibold text-amber-900 text-sm">Rejection Details</h4>
                         <div>
                           <label className="text-xs font-semibold text-slate-700 mb-1 block">Rejection Reason <span className="text-red-500">*</span></label>
-                          <textarea rows={2} value={current?.rejectionReason ?? ""}
-                            onChange={(e) => onDetailsChange?.({ rejectionReason: e.target.value })}
-                            placeholder="Enter rejection reason..."
-                            className="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300 resize-none bg-white" />
+                          <textarea rows={2} value={current?.rejectionReason ?? ""} onChange={(e) => onDetailsChange?.({ rejectionReason: e.target.value })} placeholder="Enter rejection reason..." className="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300 resize-none bg-white" />
                         </div>
                         <div>
                           <label className="text-xs font-semibold text-slate-700 mb-1 block">Rejection Owner <span className="text-red-500">*</span></label>
-                          <input type="text" value={current?.rejectionOwner ?? ""}
-                            onChange={(e) => onDetailsChange?.({ rejectionOwner: e.target.value })}
-                            placeholder="Enter owner name or ID..."
-                            className="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300 bg-white" />
+                          <input type="text" value={current?.rejectionOwner ?? ""} onChange={(e) => onDetailsChange?.({ rejectionOwner: e.target.value })} placeholder="Enter owner name or ID..." className="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300 bg-white" />
                         </div>
                         <div>
                           <label className="text-xs font-semibold text-slate-700 mb-1 block">Rejection Deviation Reason</label>
-                          <textarea rows={2} value={current?.rejectionDeviationReason ?? ""}
-                            onChange={(e) => onDetailsChange?.({ rejectionDeviationReason: e.target.value })}
-                            placeholder="Enter deviation reason (optional)..."
-                            className="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300 resize-none bg-white" />
+                          <textarea rows={2} value={current?.rejectionDeviationReason ?? ""} onChange={(e) => onDetailsChange?.({ rejectionDeviationReason: e.target.value })} placeholder="Enter deviation reason (optional)..." className="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300 resize-none bg-white" />
                         </div>
                       </div>
                     )}
@@ -2493,34 +2284,12 @@ function ValidationSection({
               })}
               <div className="relative pt-3">
                 <label className="absolute -top-1 left-2.5 px-1 bg-white text-[10px] uppercase tracking-wide font-medium text-slate-500">CHM Remark</label>
-                <textarea rows={4} placeholder="Add your remarks…"
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition resize-none" />
+                <textarea rows={4} placeholder="Add your remarks…" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition resize-none" />
               </div>
               <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-                <button
-                  onClick={() => {
-                    onPickChange(null);
-                    onDetailsChange?.({ rejectionReason: "", rejectionOwner: "", rejectionDeviationReason: "" });
-                  }}
-                  className="text-sm font-bold text-slate-500 hover:text-slate-700 uppercase tracking-widest transition"
-                >
-                  Reset
-                </button>
-                <button
-                  disabled={!canSubmit}
-                  onClick={() => {
-                    if (currentPick) {
-                      setPlanSubmitted(true);
-                      onSubmit?.(currentPick);
-                    }
-                  }}
-                  className={cn(
-                    "px-6 py-2.5 text-xs font-semibold uppercase tracking-widest rounded-lg transition shadow-sm",
-                    canSubmit
-                      ? "bg-indigo-600 text-white hover:bg-indigo-700 cursor-pointer"
-                      : "bg-slate-100 text-slate-400 cursor-not-allowed"
-                  )}
-                >
+                <button onClick={() => { onPickChange(null); onDetailsChange?.({ rejectionReason: "", rejectionOwner: "", rejectionDeviationReason: "" }); }} className="text-sm font-bold text-slate-500 hover:text-slate-700 uppercase tracking-widest transition">Reset</button>
+                <button disabled={!canSubmit} onClick={() => { if (currentPick) { setPlanSubmitted(true); onSubmit?.(currentPick); } }}
+                  className={cn("px-6 py-2.5 text-xs font-semibold uppercase tracking-widest rounded-lg transition shadow-sm", canSubmit ? "bg-indigo-600 text-white hover:bg-indigo-700 cursor-pointer" : "bg-slate-100 text-slate-400 cursor-not-allowed")}>
                   Submit Validation
                 </button>
               </div>
@@ -2560,13 +2329,9 @@ function ValidationSection({
     );
   }
 
-  // ── Fallback: generic checkpoint validation ──
   return (
     <Section title="Validation" subtitle="Checkpoint-wise validation status">
-      <ValidationPanel
-        onPickChange={onPickChange}
-        onSubmit={(pick) => onSubmit?.(pick)}
-      />
+      <ValidationPanel onPickChange={onPickChange} onSubmit={(pick) => onSubmit?.(pick)} />
     </Section>
   );
 }
@@ -2585,43 +2350,20 @@ const VALIDATION_CHECKPOINTS = [
   { title: "IS-IS Adjacency", icon: Network, count: 4, progress: 30 },
 ];
 
-function ValidationPanel({
-  onPickChange,
-  onSubmit,
-}: {
-  onPickChange?: (v: "PASS" | "FAILED" | "CANCELLED" | null) => void;
-  onSubmit?: (pick: "PASS" | "FAILED" | "CANCELLED") => void;
-}) {
+function ValidationPanel({ onPickChange, onSubmit }: { onPickChange?: (v: "PASS" | "FAILED" | "CANCELLED" | null) => void; onSubmit?: (pick: "PASS" | "FAILED" | "CANCELLED") => void }) {
   const [pick, setPick] = useState<"PASS" | "FAILED" | "CANCELLED" | null>(null);
   const [submitted, setSubmitted] = useState(false);
 
-  function handlePick(v: "PASS" | "FAILED" | "CANCELLED") {
-    setPick(v);
-    onPickChange?.(v);
-  }
-
-  function handleSubmit() {
-    if (!pick) return;
-    setSubmitted(true);
-    onSubmit?.(pick);
-  }
+  function handlePick(v: "PASS" | "FAILED" | "CANCELLED") { setPick(v); onPickChange?.(v); }
+  function handleSubmit() { if (!pick) return; setSubmitted(true); onSubmit?.(pick); }
 
   if (submitted) {
     return (
-      <div className={cn(
-        "flex items-center gap-3 rounded-lg border px-4 py-3",
-        pick === "PASS" ? "bg-green-50 border-green-100" :
-        pick === "FAILED" ? "bg-red-50 border-red-100" :
-        "bg-slate-50 border-slate-200"
-      )}>
+      <div className={cn("flex items-center gap-3 rounded-lg border px-4 py-3", pick === "PASS" ? "bg-green-50 border-green-100" : pick === "FAILED" ? "bg-red-50 border-red-100" : "bg-slate-50 border-slate-200")}>
         {pick === "PASS" && <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />}
         {pick === "FAILED" && <XCircle className="h-4 w-4 text-red-500 shrink-0" />}
         {pick === "CANCELLED" && <Ban className="h-4 w-4 text-slate-400 shrink-0" />}
-        <span className={cn("text-sm font-medium",
-          pick === "PASS" ? "text-green-800" :
-          pick === "FAILED" ? "text-red-800" :
-          "text-slate-700"
-        )}>
+        <span className={cn("text-sm font-medium", pick === "PASS" ? "text-green-800" : pick === "FAILED" ? "text-red-800" : "text-slate-700")}>
           Validation submitted — <span className="font-semibold">{pick}</span>
         </span>
       </div>
@@ -2636,8 +2378,7 @@ function ValidationPanel({
           const active = pick === t.id;
           return (
             <button key={t.id} onClick={() => handlePick(t.id)}
-              className={cn("w-full flex items-center gap-3 p-4 rounded-xl border-2 transition-all duration-200",
-                active ? `${t.border} ${t.bg} scale-[1.02] shadow-sm` : "border-slate-200 hover:border-slate-300")}>
+              className={cn("w-full flex items-center gap-3 p-4 rounded-xl border-2 transition-all duration-200", active ? `${t.border} ${t.bg} scale-[1.02] shadow-sm` : "border-slate-200 hover:border-slate-300")}>
               <Icon className={cn("h-6 w-6", t.color)} />
               <span className="font-semibold text-slate-800">{t.label}</span>
             </button>
@@ -2645,28 +2386,11 @@ function ValidationPanel({
         })}
         <div className="relative pt-3">
           <label className="absolute -top-1 left-2.5 px-1 bg-white text-[10px] uppercase tracking-wide font-medium text-slate-500">CHM Remark</label>
-          <textarea rows={4} placeholder="Add your remarks…"
-            className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition resize-none" />
+          <textarea rows={4} placeholder="Add your remarks…" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition resize-none" />
         </div>
         <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-          <button
-            onClick={() => { setPick(null); onPickChange?.(null); }}
-            className="text-sm font-bold text-slate-500 hover:text-slate-700 uppercase tracking-widest transition"
-          >
-            Reset
-          </button>
-          <button
-            disabled={!pick}
-            onClick={handleSubmit}
-            className={cn(
-              "px-6 py-2.5 text-xs font-semibold uppercase tracking-widest rounded-lg transition shadow-sm",
-              pick
-                ? "bg-indigo-600 text-white hover:bg-indigo-700 cursor-pointer"
-                : "bg-slate-100 text-slate-400 cursor-not-allowed"
-            )}
-          >
-            Submit Validation
-          </button>
+          <button onClick={() => { setPick(null); onPickChange?.(null); }} className="text-sm font-bold text-slate-500 hover:text-slate-700 uppercase tracking-widest transition">Reset</button>
+          <button disabled={!pick} onClick={handleSubmit} className={cn("px-6 py-2.5 text-xs font-semibold uppercase tracking-widest rounded-lg transition shadow-sm", pick ? "bg-indigo-600 text-white hover:bg-indigo-700 cursor-pointer" : "bg-slate-100 text-slate-400 cursor-not-allowed")}>Submit Validation</button>
         </div>
       </div>
       <div className="col-span-12 md:col-span-7 space-y-4">
@@ -2708,8 +2432,7 @@ function CheckpointCard({ cp }: { cp: Checkpoint }) {
   const Icon = cfg.icon;
   return (
     <div className="border border-slate-100 rounded-lg overflow-hidden">
-      <button onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 transition text-left">
+      <button onClick={() => setOpen((o) => !o)} className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 transition text-left">
         {open ? <ChevronDown className="h-4 w-4 text-slate-400" /> : <ChevronRight className="h-4 w-4 text-slate-400" />}
         <Icon className={cn("h-4 w-4", cfg.cls)} />
         <span className="text-sm font-medium text-slate-800 flex-1">{cp.name}</span>

@@ -4,6 +4,7 @@ import {
   Plan,
   CRQRecord,
   STATUS_STYLES,
+  OWNERSHIP_STYLES,
   TASKS_BY_CRQ,
   mopValidationStatus,
   taskClosureStatus,
@@ -98,6 +99,39 @@ const statusCol = (label = "Review Status"): ColDef => ({
   ),
 });
 
+// Ownership column — shows actual CCB/SE value (used up to & including MOP Validation)
+const ownershipCol: ColDef = {
+  key: "ownership",
+  label: "Ownership",
+  render: ({ crq }) => (
+    <span
+      className={cn(
+        "text-[11px] px-2 py-0.5 rounded-full inline-block text-center font-medium",
+        OWNERSHIP_STYLES[crq.ownership],
+      )}
+    >
+      {crq.ownership}
+    </span>
+  ),
+};
+
+// Fixed SE ownership column — used for all stages after MOP Validation
+// (schedule, exec, closure): ownership is always SE at these stages.
+const seOwnershipCol: ColDef = {
+  key: "ownership",
+  label: "Ownership",
+  render: () => (
+    <span
+      className={cn(
+        "text-[11px] px-2 py-0.5 rounded-full inline-block text-center font-medium",
+        OWNERSHIP_STYLES["SE"],
+      )}
+    >
+      SE
+    </span>
+  ),
+};
+
 const taskStatusCol: ColDef = {
   key: "taskStatus",
   label: "Task Status",
@@ -126,6 +160,7 @@ const mono = (
 
 function columnsForStage(stage: string | undefined): ColDef[] {
   switch (stage) {
+    // ── Stages where ownership can be CCB or SE ───────────────────────────
     case "impact":
       return [
         idCol(stage),
@@ -133,7 +168,8 @@ function columnsForStage(stage: string | undefined): ColDef[] {
         txt("sd", "Start Date", ({ crq }) => crq.reviewStart),
         txt("ed", "End Date", ({ crq }) => crq.reviewEnd),
         statusCol("CRQ Status"),
-        txt("iss", "Impact Status", ({ crq }) => crq.impact),
+        ownershipCol,
+        txt("iss", "Change Impact", ({ crq }) => crq.impact),
         txt("istart", "Impact Start", ({ crq }) => crq.reviewStart),
         txt("iend", "Impact End", ({ crq }) => crq.reviewEnd),
         mono("olm", "OLM ID Impact Analysis", ({ crq }) => crq.olmid),
@@ -146,6 +182,7 @@ function columnsForStage(stage: string | undefined): ColDef[] {
         txt("desc", "Description", ({ plan }) => plan.description),
         txt("mct", "MOP Created Time", ({ crq }) => crq.reviewStart),
         statusCol("CRQ Status"),
+        ownershipCol,
         txt("mcs", "MOP Creation Status", ({ crq }) =>
           crq.status === "Approved" ? "Created" : "Pending",
         ),
@@ -182,12 +219,16 @@ function columnsForStage(stage: string | undefined): ColDef[] {
             );
           },
         },
+        ownershipCol,   // mopv is the last stage where CCB/SE can vary
         taskStatusCol,
       ];
+
+    // ── Stages after MOP Validation — ownership is always SE ─────────────
     case "schedule":
       return [
         idCol(stage),
         statusCol("Status"),
+        seOwnershipCol,
         txt("ssd", "Scheduled Start Date", ({ crq }) => crq.reviewStart),
         txt("sed", "Scheduled End Date", ({ crq }) => crq.reviewEnd),
         mono("csb", "CRQ Scheduled By", ({ crq }) => crq.olmid),
@@ -212,6 +253,7 @@ function columnsForStage(stage: string | undefined): ColDef[] {
             );
           },
         },
+        seOwnershipCol,
         txt("cad", "Change Activity Done", ({ crq }) => (crq.status === "Approved" ? "Yes" : "No")),
         txt("cd", "Completed Date", ({ crq }) => crq.reviewEnd),
         mono("ccb", "CRQ Closed By", ({ crq }) => crq.olmid),
@@ -219,15 +261,27 @@ function columnsForStage(stage: string | undefined): ColDef[] {
         taskStatusCol,
       ];
     case "exec":
+      return [
+        idCol(stage),
+        statusCol("Review Status"),
+        seOwnershipCol,
+        mono("olm", "OLMID Review", ({ crq }) => crq.olmid),
+        txt("rs", "Review Start", ({ crq }) => crq.reviewStart),
+        txt("re", "Review End", ({ crq }) => crq.reviewEnd),
+        txt("imp", "Change Impact", ({ crq }) => crq.impact),
+        txt("vendor", "Vendor", ({ crq }) => crq.vendor),
+        taskStatusCol,
+      ];
     case "plan":
     default:
       return [
         idCol(stage),
         statusCol("Review Status"),
+        ownershipCol,
         mono("olm", "OLMID Review", ({ crq }) => crq.olmid),
         txt("rs", "Review Start", ({ crq }) => crq.reviewStart),
         txt("re", "Review End", ({ crq }) => crq.reviewEnd),
-        txt("imp", "Remedy Change Impact", ({ crq }) => crq.impact),
+        txt("imp", "Change Impact", ({ crq }) => crq.impact),
         txt("vendor", "Vendor", ({ crq }) => crq.vendor),
         taskStatusCol,
       ];
@@ -260,12 +314,12 @@ export function PlanValidation({
     });
   };
 
-  const handleValidationSubmit = (data: { 
-    pick: string; 
-    remark: string; 
-    rejectionReason?: string; 
-    rejectionOwner?: string; 
-    rejectionDeviationReason?: string 
+  const handleValidationSubmit = (data: {
+    pick: string;
+    remark: string;
+    rejectionReason?: string;
+    rejectionOwner?: string;
+    rejectionDeviationReason?: string;
   }) => {
     console.log("Validation submitted:", data);
     setValResult(`Validation ${data.pick} recorded for CRQ ${valCrq?.id}`);
@@ -358,9 +412,9 @@ export function PlanValidation({
       </div>
 
       {/* Modals */}
-      <ValidationModal 
-        crq={valCrq} 
-        onClose={() => setValCrq(null)} 
+      <ValidationModal
+        crq={valCrq}
+        onClose={() => setValCrq(null)}
         onSubmit={handleValidationSubmit}
       />
       <MopUploadModal crq={mopCrq} onClose={() => setMopCrq(null)} />
